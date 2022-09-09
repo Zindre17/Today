@@ -162,9 +162,9 @@ int Show(string[] args)
         return 1;
     }
 
-    Console.WriteLine($"Today {today.Flavour?.Date:dd MMM}");
+    Console.WriteLine($"Today {day.Date:dd MMM}");
     Console.WriteLine();
-    foreach (var task in today.Flavour?.Tasks ?? Enumerable.Empty<Doing>())
+    foreach (var task in day.Tasks ?? Enumerable.Empty<Doing>())
     {
         Console.WriteLine($"    {task}");
     }
