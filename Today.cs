@@ -38,4 +38,12 @@ public class Today
         doing.End = when ??= DateTime.Now;
         Console.WriteLine($"You did {doing.What} from {doing.Start:HH:mm} to {doing.End:HH:mm}");
     }
+
+    public void EndAll(DateTime when)
+    {
+        foreach (var task in Tasks.Where(t => t.End is null))
+        {
+            task.End = when;
+        }
+    }
 }

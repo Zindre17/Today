@@ -23,12 +23,25 @@ try
         "end" => End(args[1..]),
         "show" => Show(args[1..]),
         "clear" => Clear(args[1..]),
+        "list" => ListHistory(args[1..]),
         var c => NotACommand(c)
     };
 }
 finally
 {
     today.Savor();
+}
+
+int ListHistory(string[] strings)
+{
+    var history = Taste<History>.Bite().Flavour;
+    Console.WriteLine();
+    foreach (var entry in history?.Days.Keys ?? Enumerable.Empty<DateTime>())
+    {
+        Console.WriteLine($"{entry:dd MM}");
+    }
+    Console.WriteLine();
+    return 0;
 }
 
 int Clear(string[] args)
@@ -104,6 +117,11 @@ int Start(string[] args)
         history.Savor();
 
         today.Flavour = new Today.Today();
+    }
+
+    if (args.Contains("-c"))
+    {
+        today.Flavour.EndAll(when);
     }
 
     today.Flavour.Start(what, when);
