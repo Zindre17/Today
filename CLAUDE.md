@@ -29,10 +29,10 @@ There are no tests and no test framework in the repo; verification is done by ru
 
 **Model** (`Today.cs`, `Doings.cs`, `History.cs`): a `Today` is a `Date` plus a `List<Doing>`; a `Doing` is `What` + `Start` + nullable `End` (null = still running). `History.Days` is a `Dictionary<DateTime, Today>` keyed by the day's midnight `Date`, which is why `show <date>` / `clear history <date>` only match when the parsed date has no time component.
 
-**Day rollover** happens lazily and only inside `Start` (`Program.cs`): if the loaded `Today.Date` isn't today, the old day is pushed into `History` and a fresh `Today` is created. No other command rolls the day over, so `show`/`end` on a stale day operate on yesterday's record.
+**Day rollover** runs in `RollOverIfNewDay` (`Program.cs`) once before dispatch, so every command sees a current day: if the loaded `Today.Date` isn't today, the old day is pushed into `History` (and `Savor`ed) and a fresh `Today` replaces it. A stale day with no tasks is discarded rather than archived, so `list` doesn't fill with blanks.
 
-**Command dispatch** is a `switch` expression over `args[0]` in top-level statements in `Program.cs`; each command is a local function taking `args[1..]` and returning the process exit code. Add new commands there and to the help text in `NotACommand`.
+**Command dispatch** is a list-pattern `switch` expression over `args` in top-level statements in `Program.cs`; each command is a local function taking the remaining arguments and returning the process exit code. Add new commands there and to `Usage`, which `NotACommand` and the no-argument path both print.
 
-Time arguments are positional: `start <what> [when]`, `end [what] [when]`, parsed with `DateTime.TryParse` and silently falling back to `DateTime.Now` when unparseable. `start` also accepts a `-c` flag that ends all running tasks first.
+**Exit codes**: 0 on success, 1 on any user error — unknown command, missing or unparseable argument, "already doing X", "not started doing X". `Today.Start`/`Today.End` return `bool` for this reason.
 
-`Current.cs` is an empty placeholder file.
+Arguments are positional after flags are filtered out (`IsFlag`), so `start -c x` and `start x -c` behave the same: `start <what> [when]`, `end [what] [when]`. Times go through the `TryParseWhen` helper, which prints a message and fails the command rather than falling back to `DateTime.Now`.
