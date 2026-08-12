@@ -11,7 +11,13 @@ public record Doing
 
     public override string ToString()
     {
-        var timeSpan = End?.Subtract(Start);
-        return $"{What[0..Math.Min(20, What.Length)],-20}    {Start:HH:mm}{(End is not null ? $" - {End:HH:mm}    {timeSpan!.Value.Hours} Hours {timeSpan!.Value.Minutes} Minutes" : "")}";
+        var name = $"{What[0..Math.Min(20, What.Length)],-20}";
+        if (End is null)
+        {
+            return $"{name}    {Start:HH:mm}";
+        }
+
+        var timeSpan = End.Value.Subtract(Start);
+        return $"{name}    {Start:HH:mm} - {End:HH:mm}    {(int)timeSpan.TotalHours} Hours {timeSpan.Minutes} Minutes";
     }
 }

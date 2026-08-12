@@ -1,4 +1,4 @@
-﻿/*
+/*
 today
     - start x
     - end x
@@ -8,22 +8,24 @@ today
 using Taste;
 using Today;
 
-if (args.Length < 1)
-{
-    return 0;
-}
-
 var today = Taste<Today.Today>.Bite();
 
 try
 {
+    RollOverIfNewDay();
+
+    if (args.Length < 1)
+    {
+        return Usage();
+    }
+
     return args[0] switch
     {
         "start" => Start(args[1..]),
         "end" => End(args[1..]),
         "show" => Show(args[1..]),
         "clear" => Clear(args[1..]),
-        "list" => ListHistory(args[1..]),
+        "list" => ListHistory(),
         var c => NotACommand(c)
     };
 }
@@ -32,13 +34,47 @@ finally
     today.Savor();
 }
 
-int ListHistory(string[] strings)
+// Archives the previous day as soon as any command runs on a new day, so that
+// history is complete even on days where nothing was ever started.
+void RollOverIfNewDay()
+{
+    if (today.Flavour is null || today.Flavour.Date.Date == DateTime.Now.Date)
+    {
+        return;
+    }
+
+    // A day without tasks is not worth remembering.
+    if (today.Flavour.Tasks.Count > 0)
+    {
+        var history = Taste<History>.Bite();
+        history.Flavour ??= new History();
+        history.Flavour.Days[today.Flavour.Date] = today.Flavour;
+        history.Savor();
+    }
+
+    today.Flavour = new Today.Today();
+}
+
+bool TryParseWhen(string arg, out DateTime when)
+{
+    if (DateTime.TryParse(arg, out when))
+    {
+        return true;
+    }
+
+    Console.WriteLine($"'{arg}' is not a valid date or time.");
+    return false;
+}
+
+bool IsFlag(string arg) => arg.StartsWith('-');
+
+int ListHistory()
 {
     var history = Taste<History>.Bite().Flavour;
     Console.WriteLine();
     foreach (var entry in history?.Days.Keys ?? Enumerable.Empty<DateTime>())
     {
-        Console.WriteLine($"{entry:dd MM}");
+        Console.WriteLine($"{entry:yyyy-MM-dd}");
     }
     Console.WriteLine();
     return 0;
@@ -48,84 +84,78 @@ int Clear(string[] args)
 {
     if (args.Length < 1)
     {
-        Console.WriteLine("Specify wather to clear 'history' or 'today'.");
+        Console.WriteLine("Specify whether to clear 'history' or 'today'.");
         return 1;
     }
     switch (args[0])
     {
         case "today" or "t":
             today.Flavour?.Tasks.Clear();
-            break;
+            return 0;
+
         case "history" or "h":
             var history = Taste<History>.Bite();
 
             if (args.Length > 1)
             {
-                if (DateTime.TryParse(args[1], out var date))
+                if (!TryParseWhen(args[1], out var date))
                 {
-                    history.Flavour?.Days.Remove(date);
+                    return 1;
                 }
+                history.Flavour?.Days.Remove(date);
             }
             else
             {
                 history.Flavour?.Days.Clear();
             }
             history.Savor();
-            break;
+            return 0;
+
+        default:
+            Console.WriteLine($"'{args[0]}' is not something to clear. Specify 'history' or 'today'.");
+            return 1;
     }
-    return 0;
+}
+
+int Usage()
+{
+    Console.WriteLine("Available commands are 'start' 'end' 'show' 'clear' 'list'.");
+    return 1;
 }
 
 int NotACommand(string command)
 {
     Console.WriteLine($"'{command}' is not a command.");
     Console.WriteLine();
-    Console.WriteLine("Available commands are 'start' 'end' 'show'.");
-    return 0;
+    return Usage();
 }
 
 int Start(string[] args)
 {
-    if (args.Length < 1)
+    var flags = args.Where(IsFlag).ToArray();
+    var positional = args.Where(a => !IsFlag(a)).ToArray();
+
+    if (positional.Length < 1)
     {
         Console.WriteLine("You must specify what you want to start doing.");
         return 1;
     }
 
-    var what = args[0];
+    var what = positional[0];
     var when = DateTime.Now;
-    if (args.Length > 1)
+    if (positional.Length > 1 && !TryParseWhen(positional[1], out when))
     {
-        if (DateTime.TryParse(args[1], out var time))
-        {
-            when = time;
-        }
+        return 1;
     }
 
-    if (today.Flavour is null)
-    {
-        today.Flavour = new Today.Today();
-    }
-    else if (today.Flavour.Date.Date != DateTime.Now.Date)
-    {
-        var history = Taste<History>.Bite();
-        if (history.Flavour is null)
-        {
-            history.Flavour = new History();
-        }
-        history.Flavour.Days.Add(today.Flavour.Date, today.Flavour);
-        history.Savor();
+    today.Flavour ??= new Today.Today();
 
-        today.Flavour = new Today.Today();
-    }
-
-    if (args.Contains("-c"))
+    if (flags.Contains("-c"))
     {
         today.Flavour.EndAll(when);
     }
 
-    today.Flavour.Start(what, when);
-    return 0;
+    return today.Flavour.Start(what, when) ? 0 : 1;
 }
 
 int End(string[] args)
@@ -136,57 +166,55 @@ int End(string[] args)
         return 1;
     }
 
-    string? what = null;
+    var positional = args.Where(a => !IsFlag(a)).ToArray();
 
-    if (args.Length > 0)
-    {
-        what = args[0];
-    }
+    var what = positional.Length > 0 ? positional[0] : null;
 
     var when = DateTime.Now;
-    if (args.Length > 1)
+    if (positional.Length > 1 && !TryParseWhen(positional[1], out when))
     {
-        if (DateTime.TryParse(args[1], out var time))
-        {
-            when = time;
-        }
+        return 1;
     }
 
-    today.Flavour.End(what, when);
-    return 0;
+    return today.Flavour.End(what, when) ? 0 : 1;
 }
 
 int Show(string[] args)
 {
     var day = today.Flavour;
+    var isToday = true;
+
     if (args.Length > 0)
     {
-        if (DateTime.TryParse(args[0], out var date))
+        if (!TryParseWhen(args[0], out var date))
         {
-            if (Taste<History>.Bite().Flavour?.Days.TryGetValue(date, out var historicalDay) ?? false)
-            {
-                day = historicalDay;
-            }
-            else
-            {
-                Console.WriteLine($"No history for {date:dd-MM-yyyy}.");
-                return 1;
-            }
+            return 1;
+        }
+
+        if (Taste<History>.Bite().Flavour?.Days.TryGetValue(date, out var historicalDay) ?? false)
+        {
+            day = historicalDay;
+            isToday = false;
+        }
+        else
+        {
+            Console.WriteLine($"No history for {date:dd-MM-yyyy}.");
+            return 1;
         }
     }
+
     if (day is null || day.Tasks.Count is 0)
     {
         Console.WriteLine("Nothing was done this day...");
         return 1;
     }
 
-    Console.WriteLine($"Today {day.Date:dd MMM}");
+    Console.WriteLine(isToday ? $"Today {day.Date:dd MMM}" : $"{day.Date:dd MMM yyyy}");
     Console.WriteLine();
-    foreach (var task in day.Tasks ?? Enumerable.Empty<Doing>())
+    foreach (var task in day.Tasks)
     {
         Console.WriteLine($"    {task}");
     }
     Console.WriteLine();
     return 0;
 }
-
