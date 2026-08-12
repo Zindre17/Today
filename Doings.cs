@@ -1,13 +1,8 @@
 namespace Today;
 
-public record Doing
+public record Doing(string What, DateTime Start)
 {
-    public Doing(string what, DateTime start) => (What, Start) = (what, start);
-
-    public DateTime Start { get; set; }
     public DateTime? End { get; set; }
-
-    public string What { get; set; }
 
     public override string ToString()
     {

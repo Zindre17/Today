@@ -14,19 +14,15 @@ try
 {
     RollOverIfNewDay();
 
-    if (args.Length < 1)
+    return args switch
     {
-        return Usage();
-    }
-
-    return args[0] switch
-    {
-        "start" => Start(args[1..]),
-        "end" => End(args[1..]),
-        "show" => Show(args[1..]),
-        "clear" => Clear(args[1..]),
-        "list" => ListHistory(),
-        var c => NotACommand(c)
+        ["start", .. var rest] => Start(rest),
+        ["end", .. var rest] => End(rest),
+        ["show", .. var rest] => Show(rest),
+        ["clear", .. var rest] => Clear(rest),
+        ["list", ..] => ListHistory(),
+        [var c, ..] => NotACommand(c),
+        [] => Usage()
     };
 }
 finally
@@ -72,9 +68,12 @@ int ListHistory()
 {
     var history = Taste<History>.Bite().Flavour;
     Console.WriteLine();
-    foreach (var entry in history?.Days.Keys ?? Enumerable.Empty<DateTime>())
+    if (history is not null)
     {
-        Console.WriteLine($"{entry:yyyy-MM-dd}");
+        foreach (var entry in history.Days.Keys)
+        {
+            Console.WriteLine($"{entry:yyyy-MM-dd}");
+        }
     }
     Console.WriteLine();
     return 0;
@@ -82,23 +81,22 @@ int ListHistory()
 
 int Clear(string[] args)
 {
-    if (args.Length < 1)
+    switch (args)
     {
-        Console.WriteLine("Specify whether to clear 'history' or 'today'.");
-        return 1;
-    }
-    switch (args[0])
-    {
-        case "today" or "t":
+        case []:
+            Console.WriteLine("Specify whether to clear 'history' or 'today'.");
+            return 1;
+
+        case ["today" or "t", ..]:
             today.Flavour?.Tasks.Clear();
             return 0;
 
-        case "history" or "h":
+        case ["history" or "h", .. var rest]:
             var history = Taste<History>.Bite();
 
-            if (args.Length > 1)
+            if (rest is [var day, ..])
             {
-                if (!TryParseWhen(args[1], out var date))
+                if (!TryParseWhen(day, out var date))
                 {
                     return 1;
                 }
@@ -135,7 +133,7 @@ int Start(string[] args)
     var flags = args.Where(IsFlag).ToArray();
     var positional = args.Where(a => !IsFlag(a)).ToArray();
 
-    if (positional.Length < 1)
+    if (positional is [])
     {
         Console.WriteLine("You must specify what you want to start doing.");
         return 1;
@@ -143,7 +141,7 @@ int Start(string[] args)
 
     var what = positional[0];
     var when = DateTime.Now;
-    if (positional.Length > 1 && !TryParseWhen(positional[1], out when))
+    if (positional is [_, var time, ..] && !TryParseWhen(time, out when))
     {
         return 1;
     }
@@ -168,10 +166,10 @@ int End(string[] args)
 
     var positional = args.Where(a => !IsFlag(a)).ToArray();
 
-    var what = positional.Length > 0 ? positional[0] : null;
+    var what = positional is [var first, ..] ? first : null;
 
     var when = DateTime.Now;
-    if (positional.Length > 1 && !TryParseWhen(positional[1], out when))
+    if (positional is [_, var time, ..] && !TryParseWhen(time, out when))
     {
         return 1;
     }
@@ -184,9 +182,9 @@ int Show(string[] args)
     var day = today.Flavour;
     var isToday = true;
 
-    if (args.Length > 0)
+    if (args is [var wanted, ..])
     {
-        if (!TryParseWhen(args[0], out var date))
+        if (!TryParseWhen(wanted, out var date))
         {
             return 1;
         }

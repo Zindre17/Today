@@ -4,7 +4,7 @@ public class Today
 {
     public DateTime Date { get; set; } = DateTime.Now.Date;
 
-    public List<Doing> Tasks { get; set; } = new();
+    public List<Doing> Tasks { get; set; } = [];
 
     public bool Start(string what, DateTime? when)
     {
@@ -15,7 +15,7 @@ public class Today
         }
         var doing = new Doing(what, when ?? DateTime.Now);
         Tasks.Add(doing);
-        Tasks.Sort((a, b) => a.Start == b.Start ? 0 : (a.Start < b.Start ? -1 : 1));
+        Tasks.Sort((a, b) => a.Start.CompareTo(b.Start));
         Console.WriteLine($"Started doing {doing.What} at {doing.Start:HH:mm}");
         return true;
 
