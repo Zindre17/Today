@@ -4,12 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-`today` is a single-project .NET 6 console app packaged as a **dotnet global tool** (`ToolCommandName: today`). It tracks what you worked on during a day: `start`/`end` named tasks, `show` the day, `list` past days, `clear` state.
+`today` is a single-project .NET 10 console app packaged as a **dotnet global tool** (`ToolCommandName: today`). It tracks what you worked on during a day: `start`/`end` named tasks, `show` the day, `list` past days, `clear` state.
 
 ## Commands
 
 ```bash
-dotnet build                       # net6.0 is EOL, so NETSDK1138 warnings are expected
+dotnet build
 dotnet run -- <args>               # e.g. dotnet run -- start coding, dotnet run -- show
 dotnet pack -c Release             # produces ./nupkg/Today.<version>.nupkg
 dotnet tool install --global --add-source ./nupkg Today
@@ -23,7 +23,7 @@ There are no tests and no test framework in the repo; verification is done by ru
 
 **Persistence via `Taste`** (NuGet `Taste` 1.0.1, https://github.com/Zindre17/Taste). `Taste<T>.Bite()` loads a JSON file, `.Flavour` is the (nullable) deserialized state, `.Savor()` writes it back. Key consequences:
 
-- Files live **next to the executable**, named `<assembly>.<type>.json` — i.e. `today.today.json` and `today.history.json`. Under `dotnet run` that means `bin/Debug/net6.0/`; for an installed global tool it's the tool's install directory. State is therefore per-build-output, not per-user.
+- Files live **next to the running executable** (`Taste` derives the directory from `Environment.ProcessPath`), named `<assembly>.<type>.json` — i.e. `today.today.json` and `today.history.json`. Under `dotnet run` that means `bin/Debug/net10.0/`; for the installed global tool it's next to the shim, `~/.dotnet/tools/today.today.json`, not the `.store` package directory. State is therefore per-executable, not per-user, and a local build never sees the installed tool's data.
 - `Bite()` returns a cached singleton per type, so all call sites in a run share one instance. Nothing is written unless `Savor()` is called.
 - `Program.cs` calls `today.Savor()` in a `finally` around the command dispatch, so today's state always persists. **`History` is not covered by that** — every code path that mutates `Taste<History>.Bite().Flavour` must call `Savor()` itself.
 
