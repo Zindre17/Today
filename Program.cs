@@ -1,10 +1,3 @@
-/*
-today
-    - start x
-    - end x
-    - show
-*/
-
 using Taste;
 using Today;
 
