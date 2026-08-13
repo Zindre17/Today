@@ -7,13 +7,14 @@
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     
-    <Version>1.2.0</Version>
+    <Version>1.3.0</Version>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>today</ToolCommandName>
     <PackageOutputPath>./nupkg</PackageOutputPath>
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Fansi" Version="0.0.3" />
     <PackageReference Include="Taste" Version="1.0.1" />
   </ItemGroup>
 

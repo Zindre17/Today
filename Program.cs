@@ -14,6 +14,7 @@ try
         ["show", .. var rest] => Show(rest),
         ["clear", .. var rest] => Clear(rest),
         ["list", ..] => ListHistory(),
+        ["theme", .. var rest] => ThemeCommand(rest),
         [var c, ..] => NotACommand(c),
         [] => Usage()
     };
@@ -51,7 +52,7 @@ bool TryParseWhen(string arg, out DateTime when)
         return true;
     }
 
-    Console.WriteLine($"'{arg}' is not a valid date or time.");
+    Output.Error($"'{arg}' is not a valid date or time.");
     return false;
 }
 
@@ -60,15 +61,15 @@ bool IsFlag(string arg) => arg.StartsWith('-');
 int ListHistory()
 {
     var history = Taste<History>.Bite().Flavour;
-    Console.WriteLine();
+    Output.Blank();
     if (history is not null)
     {
         foreach (var entry in history.Days.Keys)
         {
-            Console.WriteLine($"{entry:yyyy-MM-dd}");
+            Output.Date(entry);
         }
     }
-    Console.WriteLine();
+    Output.Blank();
     return 0;
 }
 
@@ -77,7 +78,7 @@ int Clear(string[] args)
     switch (args)
     {
         case []:
-            Console.WriteLine("Specify whether to clear 'history' or 'today'.");
+            Output.Error("Specify whether to clear 'history' or 'today'.");
             return 1;
 
         case ["today" or "t", ..]:
@@ -103,21 +104,21 @@ int Clear(string[] args)
             return 0;
 
         default:
-            Console.WriteLine($"'{args[0]}' is not something to clear. Specify 'history' or 'today'.");
+            Output.Error($"'{args[0]}' is not something to clear. Specify 'history' or 'today'.");
             return 1;
     }
 }
 
 int Usage()
 {
-    Console.WriteLine("Available commands are 'start' 'end' 'show' 'clear' 'list'.");
+    Output.Error("Available commands are 'start' 'end' 'show' 'clear' 'list' 'theme'.");
     return 1;
 }
 
 int NotACommand(string command)
 {
-    Console.WriteLine($"'{command}' is not a command.");
-    Console.WriteLine();
+    Output.Error($"'{command}' is not a command.");
+    Output.Blank();
     return Usage();
 }
 
@@ -128,7 +129,7 @@ int Start(string[] args)
 
     if (positional is [])
     {
-        Console.WriteLine("You must specify what you want to start doing.");
+        Output.Error("You must specify what you want to start doing.");
         return 1;
     }
 
@@ -153,7 +154,7 @@ int End(string[] args)
 {
     if (today.Flavour is null)
     {
-        Console.WriteLine("No task started yet.");
+        Output.Error("No task started yet.");
         return 1;
     }
 
@@ -189,23 +190,90 @@ int Show(string[] args)
         }
         else
         {
-            Console.WriteLine($"No history for {date:dd-MM-yyyy}.");
+            Output.Error($"No history for {date:dd-MM-yyyy}.");
             return 1;
         }
     }
 
     if (day is null || day.Tasks.Count is 0)
     {
-        Console.WriteLine("Nothing was done this day...");
+        Output.Error("Nothing was done this day...");
         return 1;
     }
 
-    Console.WriteLine(isToday ? $"Today {day.Date:dd MMM}" : $"{day.Date:dd MMM yyyy}");
-    Console.WriteLine();
+    Output.Header(isToday ? $"Today {day.Date:dd MMM}" : $"{day.Date:dd MMM yyyy}");
+    Output.Blank();
     foreach (var task in day.Tasks)
     {
-        Console.WriteLine($"    {task}");
+        Output.Task(task);
     }
-    Console.WriteLine();
+    Output.Blank();
     return 0;
+}
+
+int ThemeCommand(string[] args)
+{
+    var taste = Taste<Theme>.Bite();
+    var theme = taste.Flavour ??= new Theme();
+
+    var flags = args.Where(IsFlag).ToArray();
+    var positional = args.Where(a => !IsFlag(a)).ToArray();
+
+    switch (positional)
+    {
+        case [] or ["show"]:
+            Output.Blank();
+            foreach (var element in Theme.ElementNames)
+            {
+                Output.Sample(element, theme.Get(element)!);
+            }
+            Output.Blank();
+            return 0;
+
+        case ["set", var element, var color, ..]:
+            if (theme.Get(element) is null)
+            {
+                Output.Error($"'{element}' cannot be themed. Try: {string.Join(", ", Theme.ElementNames)}");
+                return 1;
+            }
+            if (!Output.TryGetColor(color, out _))
+            {
+                Output.Error($"'{color}' is not a color. Try: {Output.ColorNames}");
+                return 1;
+            }
+
+            theme.Set(element, new ThemeStyle
+            {
+                Color = color,
+                Bold = flags.Contains("--bold"),
+                Dim = flags.Contains("--dim"),
+                Italics = flags.Contains("--italics"),
+                Underline = flags.Contains("--underline"),
+            });
+            taste.Savor();
+            Output.Success($"Set {element} to {theme.Get(element)}.");
+            return 0;
+
+        case ["reset"]:
+            taste.Flavour = new Theme();
+            taste.Savor();
+            Output.Success("Theme reset to the defaults.");
+            return 0;
+
+        case ["reset", var element]:
+            if (new Theme().Get(element) is not { } fallback)
+            {
+                Output.Error($"'{element}' cannot be themed. Try: {string.Join(", ", Theme.ElementNames)}");
+                return 1;
+            }
+
+            theme.Set(element, fallback);
+            taste.Savor();
+            Output.Success($"Reset {element} to {fallback}.");
+            return 0;
+
+        default:
+            Output.Error("Usage: today theme [show | set <element> <color> [--bold] [--dim] [--italics] [--underline] | reset [element]]");
+            return 1;
+    }
 }

@@ -10,13 +10,13 @@ public class Today
     {
         if (Tasks.Any(IsAlreadyDoing))
         {
-            Console.WriteLine($"You are already doing {what}.");
+            Output.Error($"You are already doing {what}.");
             return false;
         }
         var doing = new Doing(what, when ?? DateTime.Now);
         Tasks.Add(doing);
         Tasks.Sort((a, b) => a.Start.CompareTo(b.Start));
-        Console.WriteLine($"Started doing {doing.What} at {doing.Start:HH:mm}");
+        Output.Success($"Started doing {doing.What} at {doing.Start:HH:mm}");
         return true;
 
         bool IsAlreadyDoing(Doing task)
@@ -32,19 +32,19 @@ public class Today
 
         if (doing is null)
         {
-            Console.WriteLine($"You have not started doing {what ?? "anything"} yet.");
+            Output.Error($"You have not started doing {what ?? "anything"} yet.");
             return false;
         }
 
         var end = when ?? DateTime.Now;
         if (end < doing.Start)
         {
-            Console.WriteLine($"Cannot end {doing.What} at {end:HH:mm} because it started at {doing.Start:HH:mm}.");
+            Output.Error($"Cannot end {doing.What} at {end:HH:mm} because it started at {doing.Start:HH:mm}.");
             return false;
         }
 
         doing.End = end;
-        Console.WriteLine($"You did {doing.What} from {doing.Start:HH:mm} to {doing.End:HH:mm}");
+        Output.Success($"You did {doing.What} from {doing.Start:HH:mm} to {doing.End:HH:mm}");
         return true;
     }
 
