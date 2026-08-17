@@ -12,8 +12,11 @@ public static class Output
 
     private const int LabelWidth = 5;
 
-    // Four spaces, the name column, then two spaces before the chart area.
-    private static readonly string Indent = new(' ', 4 + NameWidth + 2);
+    // Wide enough for the longest span a day can hold, "23h59m".
+    private const int TimeWidth = 6;
+
+    // Four spaces, the name column, the duration column, then two spaces before the chart area.
+    private static readonly string Indent = new(' ', 4 + NameWidth + 2 + TimeWidth + 2);
 
     // Fansi always emits escape sequences, so the usual opt-outs are our job. An
     // OutputFormat with no colors set emits none, which is what plain mode relies on.
@@ -86,12 +89,14 @@ public static class Output
             }
 
             var name = Format(running ? theme.Running : theme.Task, NameWidth).ApplyToText(task.What);
-            Console.WriteLine($"    {name}  {Apply(style, new string(bar).TrimEnd())}");
+            var took = Time(theme.Duration, Finish(task, reference) - task.Start);
+
+            Console.WriteLine($"    {name}  {took}  {Apply(style, new string(bar).TrimEnd())}");
         }
 
+        // The total sits in the same column as the times above it, so it reads as their sum.
         var total = tasks.Aggregate(TimeSpan.Zero, (sum, task) => sum + (Finish(task, reference) - task.Start));
-        Console.WriteLine($"    {Format(new ThemeStyle(), NameWidth).ApplyToText("total")}  " +
-            $"{Apply(theme.Duration, $"{(int)total.TotalHours} Hours {total.Minutes} Minutes")}");
+        Console.WriteLine($"    {Format(new ThemeStyle(), NameWidth).ApplyToText("total")}  {Time(theme.Duration, total)}");
     }
 
     /// <summary>
@@ -106,6 +111,20 @@ public static class Output
 
         Console.WriteLine($"    {name}  {settings}  {Apply(style, "The quick brown fox")}");
     }
+
+    /// <summary>
+    ///     A span in the duration column: right-aligned, and spelled the way `did` accepts it, so
+    ///     what the chart reports can be typed straight back in.
+    /// </summary>
+    private static string Time(ThemeStyle style, TimeSpan span) =>
+        Format(style, TimeWidth, TextAlignment.Right).ApplyToText(Spell(span));
+
+    private static string Spell(TimeSpan span) => span switch
+    {
+        { TotalMinutes: < 1 } => $"{span.Seconds}s",
+        { TotalHours: < 1 } => $"{span.Minutes}m",
+        _ => $"{(int)span.TotalHours}h{span.Minutes:00}m",
+    };
 
     /// <summary>
     ///     When a task stops. An unfinished one runs up to <paramref name="reference" />, but never
@@ -208,11 +227,12 @@ public static class Output
 
     private static string Apply(ThemeStyle style, string text) => Format(style).ApplyToText(text);
 
-    private static OutputFormat Format(ThemeStyle style, int? width = null)
+    private static OutputFormat Format(ThemeStyle style, int? width = null, TextAlignment? alignment = null)
     {
         var format = new OutputFormat
         {
             Width = width,
+            Alignment = alignment,
             AddEllipsisToOverflow = width is not null,
         };
 
