@@ -203,10 +203,8 @@ int Show(string[] args)
 
     Output.Header(isToday ? $"Today {day.Date:dd MMM}" : $"{day.Date:dd MMM yyyy}");
     Output.Blank();
-    foreach (var task in day.Tasks)
-    {
-        Output.Task(task);
-    }
+    // A day out of history has no "now" to draw an unfinished task up to.
+    Output.Chart(day.Tasks, isToday ? DateTime.Now : day.Tasks.Max(t => t.End ?? t.Start));
     Output.Blank();
     return 0;
 }

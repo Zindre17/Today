@@ -19,6 +19,10 @@ public record Theme
 
     public ThemeStyle Time { get; set; } = new() { Color = "Cyan" };
 
+    public ThemeStyle Bar { get; set; } = new() { Color = "Cyan" };
+
+    public ThemeStyle Axis { get; set; } = new() { Color = "BrightBlack" };
+
     public ThemeStyle Duration { get; set; } = new() { Color = "BrightBlack" };
 
     public ThemeStyle Date { get; set; } = new() { Color = "Yellow" };
