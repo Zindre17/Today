@@ -8,6 +8,9 @@ namespace Today;
 /// <remarks>
 ///     Colors are stored by name rather than as a <c>Fansi.BasicColor</c> so the file stays
 ///     readable, and so an unknown name degrades to the default instead of failing to load.
+///     Every element here must be read by <see cref="Output" />: `theme show` lists them
+///     reflectively, so one that nothing renders is a setting the user can change to no effect.
+///     Dropping one is safe — its now-unknown key in an existing file is ignored on load.
 /// </remarks>
 public record Theme
 {
@@ -16,8 +19,6 @@ public record Theme
     public ThemeStyle Task { get; set; } = new();
 
     public ThemeStyle Running { get; set; } = new() { Color = "BrightGreen", Bold = true };
-
-    public ThemeStyle Time { get; set; } = new() { Color = "Cyan" };
 
     public ThemeStyle Bar { get; set; } = new() { Color = "Cyan" };
 

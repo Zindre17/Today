@@ -16,13 +16,21 @@ public static class Output
     // Wide enough for the longest span a day can hold, "23h59m".
     private const int TimeWidth = 6;
 
+    // The widest "command [args]" in the help, so the descriptions line up beneath each other.
+    private const int SyntaxWidth = 30;
+
     // Four spaces, the name column, the duration column, then two spaces before the chart area.
     private static readonly string Indent = new(' ', 4 + NameWidth + 2 + TimeWidth + 2);
 
     // Fansi always emits escape sequences, so the usual opt-outs are our job. An
     // OutputFormat with no colors set emits none, which is what plain mode relies on.
-    private static readonly bool Plain =
-        Environment.GetEnvironmentVariable("NO_COLOR") is not (null or "") || Console.IsOutputRedirected;
+    private static readonly bool NoColor = Environment.GetEnvironmentVariable("NO_COLOR") is not (null or "");
+
+    // The two streams are redirected independently -- `today show > day.txt` leaves stderr on
+    // the terminal -- so each decides its own styling rather than sharing one answer.
+    private static bool Plain => NoColor || Console.IsOutputRedirected;
+
+    private static bool PlainError => NoColor || Console.IsErrorRedirected;
 
     private static Theme? current;
 
@@ -46,7 +54,18 @@ public static class Output
 
     public static void Success(string text) => Console.WriteLine(Apply(Current.Success, text));
 
-    public static void Error(string text) => Console.WriteLine(Apply(Current.Error, text));
+    /// <summary>
+    ///     Complaints go to stderr, so `today show > day.txt` captures the chart and not the
+    ///     reason there wasn't one, and `2>/dev/null` silences the reason and not the chart.
+    /// </summary>
+    public static void Error(string text) =>
+        Console.Error.WriteLine(Format(Current.Error, plain: PlainError).ApplyToText(text));
+
+    /// <summary>
+    ///     One line of `today help`: the command with its arguments, then what it does.
+    /// </summary>
+    public static void Command(string syntax, string does) =>
+        Console.WriteLine($"    {Format(Current.Task, SyntaxWidth).ApplyToText(syntax)}  {does}");
 
     public static void Date(DateTime date) => Console.WriteLine(Apply(Current.Date, $"{date:yyyy-MM-dd}"));
 
@@ -266,7 +285,9 @@ public static class Output
 
     private static string Apply(ThemeStyle style, string text) => Format(style).ApplyToText(text);
 
-    private static OutputFormat Format(ThemeStyle style, int? width = null, TextAlignment? alignment = null)
+    /// <param name="plain">Which stream's answer to use; null means stdout's.</param>
+    private static OutputFormat Format(
+        ThemeStyle style, int? width = null, TextAlignment? alignment = null, bool? plain = null)
     {
         var format = new OutputFormat
         {
@@ -275,7 +296,7 @@ public static class Output
             AddEllipsisToOverflow = width is not null,
         };
 
-        if (Plain)
+        if (plain ?? Plain)
         {
             return format;
         }

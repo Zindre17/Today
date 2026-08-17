@@ -1,9 +1,24 @@
+using System.Reflection;
 using Taste;
 using Today;
 
 var today = Taste<Today.Today>.Bite();
 
-string[] commands = ["start", "end", "did", "rm", "show", "clear", "list", "theme"];
+// Every command, described once. `complete commands` takes the names, `help` prints the table
+// and Usage lists them, so adding a command here is the only place it has to be introduced.
+(string Name, string Args, string Does)[] commands =
+[
+    ("start", "<what> [when]", "Begin a task. -c ends the others first."),
+    ("end", "[what] [when]", "Finish a task, or the newest one."),
+    ("did", "<what> <duration>", "Log one already over: 15m, 1h30m."),
+    ("rm", "<what>", "Delete a task logged by mistake."),
+    ("show", "[date]", "Draw the day as a Gantt chart."),
+    ("list", "", "The days kept in history."),
+    ("clear", "today | history [date]", "Forget today, or a day of history."),
+    ("theme", "[show | set | reset]", "Color the output."),
+    ("help", "", "What you are reading."),
+    ("version", "", "Which version this is."),
+];
 
 try
 {
@@ -20,6 +35,8 @@ try
         ["list", ..] => ListHistory(),
         ["theme", .. var rest] => ThemeCommand(rest),
         ["complete", .. var rest] => Complete(rest),
+        ["help" or "--help" or "-h", ..] => Help(),
+        ["version" or "--version", ..] => Version(),
         [var c, ..] => NotACommand(c),
         [] => Usage()
     };
@@ -188,9 +205,9 @@ int Complete(string[] args)
     switch (args)
     {
         case ["commands", ..]:
-            foreach (var command in commands)
+            foreach (var (name, _, _) in commands)
             {
-                Console.WriteLine(command);
+                Console.WriteLine(name);
             }
             return 0;
 
@@ -222,9 +239,36 @@ int Complete(string[] args)
     }
 }
 
+// `today help`: every command, what it takes and what it does. Goes to stdout and exits 0 --
+// asking for help is not a failure, and the answer should be pipeable.
+int Help()
+{
+    Output.Blank();
+    Output.Header("today -- what you worked on, while you work on it");
+    Output.Blank();
+
+    foreach (var (name, arguments, does) in commands)
+    {
+        Output.Command(arguments is "" ? name : $"{name} {arguments}", does);
+    }
+
+    Output.Blank();
+    return 0;
+}
+
+// Raw and unthemed like Complete: a version is something a script reads, not something to look at.
+int Version()
+{
+    Console.WriteLine(Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "unknown");
+    return 0;
+}
+
+// Printed when there is nothing to act on, so it goes to stderr at exit 1 -- unlike `help`,
+// which is what the user asked for.
 int Usage()
 {
-    Output.Error($"Available commands are {string.Join(" ", commands.Select(c => $"\'{c}\'"))}.");
+    Output.Error($"Available commands are {string.Join(" ", commands.Select(c => $"\'{c.Name}\'"))}.");
+    Output.Error("Run 'today help' for what each one takes.");
     return 1;
 }
 
