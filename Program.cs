@@ -3,7 +3,7 @@ using Today;
 
 var today = Taste<Today.Today>.Bite();
 
-string[] commands = ["start", "end", "show", "clear", "list", "theme"];
+string[] commands = ["start", "end", "did", "show", "clear", "list", "theme"];
 
 try
 {
@@ -13,6 +13,7 @@ try
     {
         ["start", .. var rest] => Start(rest),
         ["end", .. var rest] => End(rest),
+        ["did", .. var rest] => Did(rest),
         ["show", .. var rest] => Show(rest),
         ["clear", .. var rest] => Clear(rest),
         ["list", ..] => ListHistory(),
@@ -60,6 +61,73 @@ bool TryParseWhen(string arg, out DateTime when)
 }
 
 bool IsFlag(string arg) => arg.StartsWith('-');
+
+/// <summary>
+///     Parses a compact duration such as 15m, 2h or 1h30m.
+/// </summary>
+bool TryParseDuration(string arg, out TimeSpan duration)
+{
+    duration = TimeSpan.Zero;
+    var rest = arg.AsSpan();
+
+    while (!rest.IsEmpty)
+    {
+        var digits = 0;
+        while (digits < rest.Length && char.IsAsciiDigit(rest[digits]))
+        {
+            digits++;
+        }
+
+        var letters = digits;
+        while (letters < rest.Length && char.IsAsciiLetter(rest[letters]))
+        {
+            letters++;
+        }
+
+        // A number, then its unit. Anything else -- no digits, no unit, a stray
+        // character -- means this is not a duration at all.
+        if (digits is 0 || letters == digits || !long.TryParse(rest[..digits], out var value))
+        {
+            break;
+        }
+
+        var unit = rest[digits..letters];
+        rest = rest[letters..];
+
+        // Beyond a week the arithmetic stops being meaningful for a day tracker, and
+        // TimeSpan.From* throws long before that.
+        if (value > 10_080)
+        {
+            break;
+        }
+
+        if (unit.Equals("s", StringComparison.OrdinalIgnoreCase) || unit.StartsWith("sec", StringComparison.OrdinalIgnoreCase))
+        {
+            duration += TimeSpan.FromSeconds(value);
+        }
+        else if (unit.Equals("m", StringComparison.OrdinalIgnoreCase) || unit.StartsWith("min", StringComparison.OrdinalIgnoreCase))
+        {
+            duration += TimeSpan.FromMinutes(value);
+        }
+        else if (unit.Equals("h", StringComparison.OrdinalIgnoreCase) || unit.StartsWith("hr", StringComparison.OrdinalIgnoreCase) || unit.StartsWith("hour", StringComparison.OrdinalIgnoreCase))
+        {
+            duration += TimeSpan.FromHours(value);
+        }
+        else
+        {
+            break;
+        }
+
+        if (rest.IsEmpty)
+        {
+            return true;
+        }
+    }
+
+    Output.Error($"'{arg}' is not a duration. Try 15m, 2h or 1h30m.");
+    duration = TimeSpan.Zero;
+    return false;
+}
 
 int ListHistory()
 {
@@ -201,6 +269,28 @@ int End(string[] args)
     }
 
     return today.Flavour.End(what, when) ? 0 : 1;
+}
+
+// `did <what> <duration>` records something that ran for that long and ended now.
+int Did(string[] args)
+{
+    var positional = args.Where(a => !IsFlag(a)).ToArray();
+
+    if (positional is not [var what, var length, ..])
+    {
+        Output.Error("Say what you did and how long it took, as in: today did standup 15m");
+        return 1;
+    }
+
+    if (!TryParseDuration(length, out var duration))
+    {
+        return 1;
+    }
+
+    var now = DateTime.Now;
+    today.Flavour ??= new Today.Today();
+
+    return today.Flavour.Did(what, now - duration, now) ? 0 : 1;
 }
 
 int Show(string[] args)

@@ -13,14 +13,30 @@ public class Today
             Output.Error($"You are already doing {what}.");
             return false;
         }
-        var doing = new Doing(what, when ?? DateTime.Now);
-        Tasks.Add(doing);
-        Tasks.Sort((a, b) => a.Start.CompareTo(b.Start));
+        var doing = Insert(new Doing(what, when ?? DateTime.Now));
         Output.Success($"Started doing {doing.What} at {doing.Start:HH:mm}");
         return true;
 
         bool IsAlreadyDoing(Doing task)
             => task.What == what && task.End is null;
+    }
+
+    /// <summary>
+    ///     Records something already finished, for the times you only remember to log it
+    ///     afterwards. Unlike <see cref="Start" /> it does not mind a task of the same name
+    ///     running: logging what you just did says nothing about what you are doing.
+    /// </summary>
+    public bool Did(string what, DateTime start, DateTime end)
+    {
+        if (end < start)
+        {
+            Output.Error($"Cannot have done {what} from {start:HH:mm} to {end:HH:mm}.");
+            return false;
+        }
+
+        var doing = Insert(new Doing(what, start) { End = end });
+        Output.Success($"You did {doing.What} from {doing.Start:HH:mm} to {doing.End:HH:mm}");
+        return true;
     }
 
     public bool End(string? what, DateTime? when = null)
@@ -46,6 +62,16 @@ public class Today
         doing.End = end;
         Output.Success($"You did {doing.What} from {doing.Start:HH:mm} to {doing.End:HH:mm}");
         return true;
+    }
+
+    /// <summary>
+    ///     Adds a task and keeps the day in start order, which is the order everything reads in.
+    /// </summary>
+    private Doing Insert(Doing doing)
+    {
+        Tasks.Add(doing);
+        Tasks.Sort((a, b) => a.Start.CompareTo(b.Start));
+        return doing;
     }
 
     public void EndAll(DateTime when)

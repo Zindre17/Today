@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-`today` is a single-project .NET 10 console app packaged as a **dotnet global tool** (`ToolCommandName: today`). It tracks what you worked on during a day: `start`/`end` named tasks, `show` the day as a Gantt chart, `list` past days, `clear` state, `theme` the output.
+`today` is a single-project .NET 10 console app packaged as a **dotnet global tool** (`ToolCommandName: today`). It tracks what you worked on during a day: `start`/`end` named tasks, `did` for one already finished, `show` the day as a Gantt chart, `list` past days, `clear` state, `theme` the output.
 
 ## Commands
 
@@ -43,4 +43,6 @@ Styling is suppressed whenever stdout is redirected, so piping into a file or `c
 
 **Exit codes**: 0 on success, 1 on any user error — unknown command, missing or unparseable argument, "already doing X", "not started doing X". `Today.Start`/`Today.End` return `bool` for this reason.
 
-Arguments are positional after flags are filtered out (`IsFlag`), so `start -c x` and `start x -c` behave the same: `start <what> [when]`, `end [what] [when]`. Times go through the `TryParseWhen` helper, which prints a message and fails the command rather than falling back to `DateTime.Now`.
+Arguments are positional after flags are filtered out (`IsFlag`), so `start -c x` and `start x -c` behave the same: `start <what> [when]`, `end [what] [when]`, `did <what> <duration>`. Times go through the `TryParseWhen` helper, which prints a message and fails the command rather than falling back to `DateTime.Now`.
+
+`did` records a task that ran for `<duration>` and ended now, for the things you only remember to log afterwards. `TryParseDuration` accepts a run of number+unit pairs (`15m`, `2h`, `1h30m`; s/sec, m/min, h/hr/hour, case-insensitive) and rejects everything else rather than guessing — a bare number has no unit, so it fails. Values are capped at a week. Note that a leading `-` makes an argument a flag, so a negative duration never reaches the parser. Unlike `start`, `Today.Did` does not refuse a name that is already running: logging what you just did says nothing about what you are doing.
