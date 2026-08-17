@@ -1,3 +1,4 @@
+using System.Text;
 using Fansi;
 using Taste;
 
@@ -70,28 +71,41 @@ public static class Output
 
         Console.WriteLine($"{Indent}{Apply(theme.Axis, Axis(from, to, width, Column))}");
 
-        foreach (var task in tasks)
+        // One row per name, not per entry: `did` allows a name that is already running, and a
+        // task picked up again through the day is the same task. Every stretch of it is drawn on
+        // that one row, and the times add up.
+        foreach (var task in tasks.GroupBy(t => t.What))
         {
-            var running = task.End is null;
-            var style = running ? theme.Running : theme.Bar;
-
-            var start = Column(task.Start);
-            var end = Column(Finish(task, reference));
+            var running = task.Any(t => t.End is null);
+            var took = TimeSpan.Zero;
 
             var bar = new char[width];
             Array.Fill(bar, ' ');
-            // A task shorter than one column still deserves to be visible, including one that
-            // starts on the closing edge of the window.
-            var first = Math.Min(start, width - 1);
-            for (var i = first; i < Math.Max(end, first + 1) && i < width; i++)
+
+            foreach (var stretch in task)
             {
-                bar[i] = running ? '▓' : '█';
+                var finish = Finish(stretch, reference);
+                took += finish - stretch.Start;
+
+                // A stretch shorter than one column still deserves to be visible, including one
+                // that starts on the closing edge of the window.
+                var start = Math.Min(Column(stretch.Start), width - 1);
+                var end = Column(finish);
+                for (var i = start; i < Math.Max(end, start + 1) && i < width; i++)
+                {
+                    // Stretches of one name can overlap -- `did` does not mind logging over
+                    // something still running. Where they do, the running one wins: that time is
+                    // still accruing, and the row should say so.
+                    if (bar[i] is not '▓')
+                    {
+                        bar[i] = stretch.End is null ? '▓' : '█';
+                    }
+                }
             }
 
-            var name = Format(running ? theme.Running : theme.Task, NameWidth).ApplyToText(task.What);
-            var took = Time(theme.Duration, Finish(task, reference) - task.Start);
+            var name = Format(running ? theme.Running : theme.Task, NameWidth).ApplyToText(task.Key);
 
-            Console.WriteLine($"    {name}  {took}  {Apply(style, new string(bar).TrimEnd())}");
+            Console.WriteLine($"    {name}  {Time(theme.Duration, took)}  {Bar(theme, bar)}");
         }
 
         // The total sits in the same column as the times above it, so it reads as their sum.
@@ -110,6 +124,31 @@ public static class Output
         var settings = Format(new ThemeStyle(), 26).ApplyToText(style.ToString());
 
         Console.WriteLine($"    {name}  {settings}  {Apply(style, "The quick brown fox")}");
+    }
+
+    /// <summary>
+    ///     One row's bar. A row can hold finished and running stretches at once, so it is emitted a
+    ///     run at a time and each keeps its own style; the gaps between them stay unstyled.
+    /// </summary>
+    private static string Bar(Theme theme, char[] cells)
+    {
+        var last = Array.FindLastIndex(cells, c => c is not ' ') + 1;
+        var bar = new StringBuilder();
+
+        for (var i = 0; i < last;)
+        {
+            var run = i;
+            while (run < last && cells[run] == cells[i])
+            {
+                run++;
+            }
+
+            var text = new string(cells[i], run - i);
+            bar.Append(cells[i] is ' ' ? text : Apply(cells[i] is '▓' ? theme.Running : theme.Bar, text));
+            i = run;
+        }
+
+        return bar.ToString();
     }
 
     /// <summary>
