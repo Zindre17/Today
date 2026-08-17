@@ -39,6 +39,8 @@ Styling is suppressed whenever stdout is redirected, so piping into a file or `c
 
 **Command dispatch** is a list-pattern `switch` expression over `args` in top-level statements in `Program.cs`; each command is a local function taking the remaining arguments and returning the process exit code. Add new commands there and to `Usage`, which `NotACommand` and the no-argument path both print.
 
+**Shell completion** (`completions/today.bash`, installed to `~/.local/share/bash-completion/completions/today`). The script holds no knowledge of its own: it asks the binary via the hidden `complete` command — `today complete commands` for the command list, `today complete end` for the tasks currently running — so `today end <TAB>` offers exactly what `end` would accept. `Complete` writes raw lines with `Console.WriteLine` rather than through `Output`, and is deliberately left out of `Usage` since it is for scripts. Task names contain spaces, so the script dequotes the word readline gives it before matching and re-escapes each candidate with `printf %q` (unless the user opened a quote, where raw names complete inside it). Changing the command list means editing `commands` in `Program.cs` only.
+
 **Exit codes**: 0 on success, 1 on any user error — unknown command, missing or unparseable argument, "already doing X", "not started doing X". `Today.Start`/`Today.End` return `bool` for this reason.
 
 Arguments are positional after flags are filtered out (`IsFlag`), so `start -c x` and `start x -c` behave the same: `start <what> [when]`, `end [what] [when]`. Times go through the `TryParseWhen` helper, which prints a message and fails the command rather than falling back to `DateTime.Now`.

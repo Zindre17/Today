@@ -3,6 +3,8 @@ using Today;
 
 var today = Taste<Today.Today>.Bite();
 
+string[] commands = ["start", "end", "show", "clear", "list", "theme"];
+
 try
 {
     RollOverIfNewDay();
@@ -15,6 +17,7 @@ try
         ["clear", .. var rest] => Clear(rest),
         ["list", ..] => ListHistory(),
         ["theme", .. var rest] => ThemeCommand(rest),
+        ["complete", .. var rest] => Complete(rest),
         [var c, ..] => NotACommand(c),
         [] => Usage()
     };
@@ -109,9 +112,38 @@ int Clear(string[] args)
     }
 }
 
+// Feeds the shell completion script. Deliberately absent from Usage: it is for
+// scripts, not people. Output is raw, one candidate per line, never themed.
+int Complete(string[] args)
+{
+    switch (args)
+    {
+        case ["commands", ..]:
+            foreach (var command in commands)
+            {
+                Console.WriteLine(command);
+            }
+            return 0;
+
+        // The tasks `today end` would accept right now: the ones still running.
+        case ["end", ..]:
+            if (today.Flavour is { } day)
+            {
+                foreach (var task in day.Tasks.Where(t => t.End is null))
+                {
+                    Console.WriteLine(task.What);
+                }
+            }
+            return 0;
+
+        default:
+            return 1;
+    }
+}
+
 int Usage()
 {
-    Output.Error("Available commands are 'start' 'end' 'show' 'clear' 'list' 'theme'.");
+    Output.Error($"Available commands are {string.Join(" ", commands.Select(c => $"\'{c}\'"))}.");
     return 1;
 }
 
