@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-`today` is a single-project .NET 10 console app packaged as a **dotnet global tool** (`ToolCommandName: today`). It tracks what you worked on during a day: `start`/`end` named tasks, `did` for one already finished, `show` the day as a Gantt chart, `list` past days, `clear` state, `theme` the output.
+`today` is a single-project .NET 10 console app packaged as a **dotnet global tool** (`ToolCommandName: today`). It tracks what you worked on during a day: `start`/`end` named tasks, `did` for one already finished, `rm` for one logged by mistake, `show` the day as a Gantt chart, `list` past days, `clear` state, `theme` the output.
 
 ## Commands
 
@@ -39,10 +39,12 @@ Styling is suppressed whenever stdout is redirected, so piping into a file or `c
 
 **Command dispatch** is a list-pattern `switch` expression over `args` in top-level statements in `Program.cs`; each command is a local function taking the remaining arguments and returning the process exit code. Add new commands there and to `Usage`, which `NotACommand` and the no-argument path both print.
 
-**Shell completion** (`completions/today.bash`, installed to `~/.local/share/bash-completion/completions/today`). The script holds no knowledge of its own: it asks the binary via the hidden `complete` command — `today complete commands` for the command list, `today complete end` for the tasks currently running — so `today end <TAB>` offers exactly what `end` would accept. `Complete` writes raw lines with `Console.WriteLine` rather than through `Output`, and is deliberately left out of `Usage` since it is for scripts. Task names contain spaces, so the script dequotes the word readline gives it before matching and re-escapes each candidate with `printf %q` (unless the user opened a quote, where raw names complete inside it). Changing the command list means editing `commands` in `Program.cs` only.
+**Shell completion** (`completions/today.bash`, installed to `~/.local/share/bash-completion/completions/today`). The script holds no knowledge of its own: it asks the binary via the hidden `complete` command — `today complete commands` for the command list, `today complete end` for the tasks currently running, `today complete rm` for every distinct name on the day — so `today end <TAB>` and `today rm <TAB>` each offer exactly what that command would accept. The script passes `$cmd` straight through, so a new completable command needs a `case` in `Complete` and its name in the `end|rm` test. `Complete` writes raw lines with `Console.WriteLine` rather than through `Output`, and is deliberately left out of `Usage` since it is for scripts. Task names contain spaces, so the script dequotes the word readline gives it before matching and re-escapes each candidate with `printf %q` (unless the user opened a quote, where raw names complete inside it). Changing the command list means editing `commands` in `Program.cs` only.
 
 **Exit codes**: 0 on success, 1 on any user error — unknown command, missing or unparseable argument, "already doing X", "not started doing X". `Today.Start`/`Today.End` return `bool` for this reason.
 
 Arguments are positional after flags are filtered out (`IsFlag`), so `start -c x` and `start x -c` behave the same: `start <what> [when]`, `end [what] [when]`, `did <what> <duration>`. Times go through the `TryParseWhen` helper, which prints a message and fails the command rather than falling back to `DateTime.Now`.
 
 `did` records a task that ran for `<duration>` and ended now, for the things you only remember to log afterwards. `TryParseDuration` accepts a run of number+unit pairs (`15m`, `2h`, `1h30m`; s/sec, m/min, h/hr/hour, case-insensitive) and rejects everything else rather than guessing — a bare number has no unit, so it fails. Values are capped at a week. Note that a leading `-` makes an argument a flag, so a negative duration never reaches the parser. Unlike `start`, `Today.Did` does not refuse a name that is already running: logging what you just did says nothing about what you are doing.
+
+`rm <what>` deletes a task from today — the mistyped `start`, the `did` with the wrong duration. `Today.Remove` uses `FindLastIndex`, and since `Insert` keeps `Tasks` in start order that is the latest-starting match, which is the one just logged; running or finished makes no difference. It only touches today, never `History` — clearing a past day is `clear history <date>`.

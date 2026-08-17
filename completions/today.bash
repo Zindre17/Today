@@ -6,7 +6,7 @@
 #
 # Candidates come from `today complete ...`, so the shell never has its own idea
 # of what the commands are, and `today end <TAB>` offers exactly the tasks that
-# are running right now.
+# are running right now -- `today rm <TAB>`, everything on the day.
 
 _today()
 {
@@ -19,16 +19,16 @@ _today()
         return
     fi
 
-    [[ $cmd == end ]] || return
+    [[ $cmd == end || $cmd == rm ]] || return
 
-    # `end <what> [when]` -- only the first argument is a task name.
+    # `end <what> [when]` and `rm <what>` -- only the first argument is a task name.
     argc=0
     for ((i = 2; i < COMP_CWORD; i++)); do
         [[ ${COMP_WORDS[i]} == -* ]] || ((argc++))
     done
     ((argc == 0)) || return
 
-    names=$(today complete end 2>/dev/null) || return
+    names=$(today complete "$cmd" 2>/dev/null) || return
     [[ -n $names ]] || return
 
     # Task names contain spaces, so the word readline hands us may be quoted or

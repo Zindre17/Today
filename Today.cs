@@ -39,6 +39,29 @@ public class Today
         return true;
     }
 
+    /// <summary>
+    ///     Deletes a task from the day. A name can repeat — <see cref="Did" /> allows it — so the
+    ///     most recently started one goes, that being the one just logged by mistake.
+    /// </summary>
+    public bool Remove(string what)
+    {
+        var index = Tasks.FindLastIndex(t => t.What == what);
+
+        if (index < 0)
+        {
+            Output.Error($"You have not done {what} today.");
+            return false;
+        }
+
+        var doing = Tasks[index];
+        Tasks.RemoveAt(index);
+
+        Output.Success(doing.End is null
+            ? $"Removed {doing.What}, which started at {doing.Start:HH:mm}"
+            : $"Removed {doing.What}, {doing.Start:HH:mm} to {doing.End:HH:mm}");
+        return true;
+    }
+
     public bool End(string? what, DateTime? when = null)
     {
         var doing = what is null

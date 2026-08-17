@@ -3,7 +3,7 @@ using Today;
 
 var today = Taste<Today.Today>.Bite();
 
-string[] commands = ["start", "end", "did", "show", "clear", "list", "theme"];
+string[] commands = ["start", "end", "did", "rm", "show", "clear", "list", "theme"];
 
 try
 {
@@ -14,6 +14,7 @@ try
         ["start", .. var rest] => Start(rest),
         ["end", .. var rest] => End(rest),
         ["did", .. var rest] => Did(rest),
+        ["rm", .. var rest] => Remove(rest),
         ["show", .. var rest] => Show(rest),
         ["clear", .. var rest] => Clear(rest),
         ["list", ..] => ListHistory(),
@@ -195,11 +196,23 @@ int Complete(string[] args)
 
         // The tasks `today end` would accept right now: the ones still running.
         case ["end", ..]:
-            if (today.Flavour is { } day)
+            if (today.Flavour is { } running)
             {
-                foreach (var task in day.Tasks.Where(t => t.End is null))
+                foreach (var task in running.Tasks.Where(t => t.End is null))
                 {
                     Console.WriteLine(task.What);
+                }
+            }
+            return 0;
+
+        // `today rm` accepts anything on the day, finished or not. A name can repeat, so
+        // offer each one once.
+        case ["rm", ..]:
+            if (today.Flavour is { } day)
+            {
+                foreach (var name in day.Tasks.Select(t => t.What).Distinct())
+                {
+                    Console.WriteLine(name);
                 }
             }
             return 0;
@@ -291,6 +304,26 @@ int Did(string[] args)
     today.Flavour ??= new Today.Today();
 
     return today.Flavour.Did(what, now - duration, now) ? 0 : 1;
+}
+
+// `rm <what>` deletes a task from today, for the ones logged by mistake.
+int Remove(string[] args)
+{
+    var positional = args.Where(a => !IsFlag(a)).ToArray();
+
+    if (positional is not [var what, ..])
+    {
+        Output.Error("Say what to remove, as in: today rm standup");
+        return 1;
+    }
+
+    if (today.Flavour is null)
+    {
+        Output.Error($"You have not done {what} today.");
+        return 1;
+    }
+
+    return today.Flavour.Remove(what) ? 0 : 1;
 }
 
 int Show(string[] args)
