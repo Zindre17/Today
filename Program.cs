@@ -67,15 +67,61 @@ void RollOverIfNewDay()
     today.Flavour = new Today.Today();
 }
 
+/// <summary>
+///     A moment on the day being tracked. Every task belongs to the day it is logged on —
+///     <see cref="Today.Today.Date" /> says so, <see cref="History" /> is keyed by it, and the
+///     chart's window is drawn from it — so a moment outside today is refused rather than
+///     quietly breaking all three. A moment still to come is refused too: this records what
+///     happened.
+/// </summary>
 bool TryParseWhen(string arg, out DateTime when)
 {
-    if (DateTime.TryParse(arg, out when))
+    if (!DateTime.TryParse(arg, out when))
     {
-        return true;
+        Output.Error($"'{arg}' is not a valid time. Try 14:30, or 2:30pm.");
+        return false;
     }
 
-    Output.Error($"'{arg}' is not a valid date or time.");
-    return false;
+    var now = DateTime.Now;
+
+    if (when.Date != now.Date)
+    {
+        Output.Error($"{when:yyyy-MM-dd} is not today, and a day only holds its own tasks.");
+        when = default;
+        return false;
+    }
+
+    // A time typed by hand is precise to the minute, so compare by the minute: the one in
+    // progress counts as now, and only a later one is the future. Anything finer would reject
+    // `start x 14:23` for the seconds it took to type it.
+    if (ToMinute(when) > ToMinute(now))
+    {
+        Output.Error($"{when:HH:mm} has not happened yet — it is {now:HH:mm}.");
+        when = default;
+        return false;
+    }
+
+    return true;
+
+    static DateTime ToMinute(DateTime moment) => moment.AddTicks(-(moment.Ticks % TimeSpan.TicksPerMinute));
+}
+
+/// <summary>
+///     A day named by <c>show</c> or <c>clear history</c>, which is a date rather than a moment
+///     and may be any day. <see cref="History.Days" /> is keyed by midnight, so a time typed
+///     alongside the date is dropped — carrying it through would silently match nothing.
+/// </summary>
+bool TryParseDay(string arg, out DateTime day)
+{
+    if (!DateTime.TryParse(arg, out var parsed))
+    {
+        Output.Error($"'{arg}' is not a valid date. Try 2026-08-17.");
+        day = default;
+        return false;
+    }
+
+    day = parsed.Date;
+    return true;
 }
 
 bool IsFlag(string arg) => arg.StartsWith('-');
@@ -179,7 +225,7 @@ int Clear(string[] args)
 
             if (rest is [var day, ..])
             {
-                if (!TryParseWhen(day, out var date))
+                if (!TryParseDay(day, out var date))
                 {
                     return 1;
                 }
@@ -345,9 +391,19 @@ int Did(string[] args)
     }
 
     var now = DateTime.Now;
+    var start = now - duration;
+
+    // The other way a task can land outside the day it is logged on. It hides better than a
+    // date typed by hand does, since the times reported back are only ever HH:mm.
+    if (start.Date != now.Date)
+    {
+        Output.Error($"{length} reaches back past midnight, and a day only holds its own tasks.");
+        return 1;
+    }
+
     today.Flavour ??= new Today.Today();
 
-    return today.Flavour.Did(what, now - duration, now) ? 0 : 1;
+    return today.Flavour.Did(what, start, now) ? 0 : 1;
 }
 
 // `rm <what>` deletes a task from today, for the ones logged by mistake.
@@ -377,7 +433,7 @@ int Show(string[] args)
 
     if (args is [var wanted, ..])
     {
-        if (!TryParseWhen(wanted, out var date))
+        if (!TryParseDay(wanted, out var date))
         {
             return 1;
         }
