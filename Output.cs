@@ -34,7 +34,7 @@ public static class Output
 
     private static Theme? current;
 
-    public static Theme Current => current ??= Taste<Theme>.Bite().Flavour ?? new Theme();
+    public static Theme Current => current ??= Cook.Serve<Theme>();
 
     public static string ColorNames => string.Join(", ", Enum.GetNames<BasicColor>());
 

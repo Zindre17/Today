@@ -1,8 +1,9 @@
 using System.Reflection;
 using Taste;
+using Taste.Savoring;
 using Today;
 
-var today = Taste<Today.Today>.Bite();
+var today = Cook.Serve<Today.Today>();
 
 // Every command, described once. `complete commands` takes the names, `help` prints the table
 // and Usage lists them, so adding a command here is the only place it has to be introduced.
@@ -50,21 +51,20 @@ finally
 // history is complete even on days where nothing was ever started.
 void RollOverIfNewDay()
 {
-    if (today.Flavour is null || today.Flavour.Date.Date == DateTime.Now.Date)
+    if (today.Date.Date == DateTime.Now.Date)
     {
         return;
     }
 
     // A day without tasks is not worth remembering.
-    if (today.Flavour.Tasks.Count > 0)
+    if (today.Tasks.Count > 0)
     {
-        var history = Taste<History>.Bite();
-        history.Flavour ??= new History();
-        history.Flavour.Days[today.Flavour.Date] = today.Flavour;
+        var history = Cook.Serve<History>();
+        history.Days[today.Date] = today;
         history.Savor();
     }
 
-    today.Flavour = new Today.Today();
+    today = new Today.Today();
 }
 
 /// <summary>
@@ -195,14 +195,11 @@ bool TryParseDuration(string arg, out TimeSpan duration)
 
 int ListHistory()
 {
-    var history = Taste<History>.Bite().Flavour;
+    var history = Cook.Serve<History>();
     Output.Blank();
-    if (history is not null)
+    foreach (var entry in history.Days.Keys)
     {
-        foreach (var entry in history.Days.Keys)
-        {
-            Output.Date(entry);
-        }
+        Output.Date(entry);
     }
     Output.Blank();
     return 0;
@@ -217,11 +214,11 @@ int Clear(string[] args)
             return 1;
 
         case ["today" or "t", ..]:
-            today.Flavour?.Tasks.Clear();
+            today.Tasks.Clear();
             return 0;
 
         case ["history" or "h", .. var rest]:
-            var history = Taste<History>.Bite();
+            var history = Cook.Serve<History>();
 
             if (rest is [var day, ..])
             {
@@ -229,11 +226,11 @@ int Clear(string[] args)
                 {
                     return 1;
                 }
-                history.Flavour?.Days.Remove(date);
+                history.Days.Remove(date);
             }
             else
             {
-                history.Flavour?.Days.Clear();
+                history.Days.Clear();
             }
             history.Savor();
             return 0;
@@ -259,24 +256,18 @@ int Complete(string[] args)
 
         // The tasks `today end` would accept right now: the ones still running.
         case ["end", ..]:
-            if (today.Flavour is { } running)
+            foreach (var task in today.Tasks.Where(t => t.End is null))
             {
-                foreach (var task in running.Tasks.Where(t => t.End is null))
-                {
-                    Console.WriteLine(task.What);
-                }
+                Console.WriteLine(task.What);
             }
             return 0;
 
         // `today rm` accepts anything on the day, finished or not. A name can repeat, so
         // offer each one once.
         case ["rm", ..]:
-            if (today.Flavour is { } day)
+            foreach (var name in today.Tasks.Select(t => t.What).Distinct())
             {
-                foreach (var name in day.Tasks.Select(t => t.What).Distinct())
-                {
-                    Console.WriteLine(name);
-                }
+                Console.WriteLine(name);
             }
             return 0;
 
@@ -343,19 +334,17 @@ int Start(string[] args)
         return 1;
     }
 
-    today.Flavour ??= new Today.Today();
-
     if (flags.Contains("-c"))
     {
-        today.Flavour.EndAll(when);
+        today.EndAll(when);
     }
 
-    return today.Flavour.Start(what, when) ? 0 : 1;
+    return today.Start(what, when) ? 0 : 1;
 }
 
 int End(string[] args)
 {
-    if (today.Flavour is null)
+    if (today.Tasks.Count is 0)
     {
         Output.Error("No task started yet.");
         return 1;
@@ -371,7 +360,7 @@ int End(string[] args)
         return 1;
     }
 
-    return today.Flavour.End(what, when) ? 0 : 1;
+    return today.End(what, when) ? 0 : 1;
 }
 
 // `did <what> <duration>` records something that ran for that long and ended now.
@@ -401,9 +390,7 @@ int Did(string[] args)
         return 1;
     }
 
-    today.Flavour ??= new Today.Today();
-
-    return today.Flavour.Did(what, start, now) ? 0 : 1;
+    return today.Did(what, start, now) ? 0 : 1;
 }
 
 // `rm <what>` deletes a task from today, for the ones logged by mistake.
@@ -417,18 +404,12 @@ int Remove(string[] args)
         return 1;
     }
 
-    if (today.Flavour is null)
-    {
-        Output.Error($"You have not done {what} today.");
-        return 1;
-    }
-
-    return today.Flavour.Remove(what) ? 0 : 1;
+    return today.Remove(what) ? 0 : 1;
 }
 
 int Show(string[] args)
 {
-    var day = today.Flavour;
+    var day = today;
     var isToday = true;
 
     if (args is [var wanted, ..])
@@ -438,7 +419,7 @@ int Show(string[] args)
             return 1;
         }
 
-        if (Taste<History>.Bite().Flavour?.Days.TryGetValue(date, out var historicalDay) ?? false)
+        if (Cook.Serve<History>().Days.TryGetValue(date, out var historicalDay))
         {
             day = historicalDay;
             isToday = false;
@@ -450,7 +431,7 @@ int Show(string[] args)
         }
     }
 
-    if (day is null || day.Tasks.Count is 0)
+    if (day.Tasks.Count is 0)
     {
         Output.Error("Nothing was done this day...");
         return 1;
@@ -466,8 +447,7 @@ int Show(string[] args)
 
 int ThemeCommand(string[] args)
 {
-    var taste = Taste<Theme>.Bite();
-    var theme = taste.Flavour ??= new Theme();
+    var theme = Cook.Serve<Theme>();
 
     var flags = args.Where(IsFlag).ToArray();
     var positional = args.Where(a => !IsFlag(a)).ToArray();
@@ -503,13 +483,13 @@ int ThemeCommand(string[] args)
                 Italics = flags.Contains("--italics"),
                 Underline = flags.Contains("--underline"),
             });
-            taste.Savor();
+            theme.Savor();
             Output.Success($"Set {element} to {theme.Get(element)}.");
             return 0;
 
         case ["reset"]:
-            taste.Flavour = new Theme();
-            taste.Savor();
+            theme = new Theme();
+            theme.Savor();
             Output.Success("Theme reset to the defaults.");
             return 0;
 
@@ -521,7 +501,7 @@ int ThemeCommand(string[] args)
             }
 
             theme.Set(element, fallback);
-            taste.Savor();
+            theme.Savor();
             Output.Success($"Reset {element} to {fallback}.");
             return 0;
 
