@@ -14,24 +14,30 @@ because the thing the user runs is the shim in `~/.dotnet/tools`, not `bin/Debug
 `Taste` derives its directory from:
 
 ```
-~/.dotnet/tools/today.today.json      # today, the one that matters
-~/.dotnet/tools/today.history.json    # past days
-~/.dotnet/tools/today.theme.json      # only exists once `theme set` has run
+~/.dotnet/tools/today.today.today.json      # today, the one that matters
+~/.dotnet/tools/today.today.history.json    # past days
+~/.dotnet/tools/today.today.theme.json      # only exists once `theme set` has run
 ```
 
-Losing or polluting these loses real records the user cannot reconstruct. Before running the
-**installed** `today` for any reason — smoke test, demo, screenshot — checkpoint them:
+**Files under the pre-2.0 names may also be there** — `today.today.json`, `today.history.json`,
+`today.theme.json`. Taste 2.0 names a jar by the taste's *full* type name, so those gained a
+segment, and nothing migrates them: they are no longer read, but until something renames them
+they are the only copy of everything tracked before the 2.0 release. Guard both name shapes.
+
+Losing or polluting any of these loses real records the user cannot reconstruct. Before running
+the **installed** `today` for any reason — smoke test, demo, screenshot — checkpoint them:
 
 ```bash
-for f in ~/.dotnet/tools/today.{today,history,theme}.json; do
-  [ -e "$f" ] && cp "$f" "$CLAUDE_JOB_DIR/tmp/$(basename "$f").bak"
+for f in ~/.dotnet/tools/today.*.json; do
+  cp "$f" "$CLAUDE_JOB_DIR/tmp/$(basename "$f").bak"
 done
-md5sum ~/.dotnet/tools/today.today.json
+md5sum ~/.dotnet/tools/today.*.json
 ```
 
-Restore afterwards and prove it with a second `md5sum` that matches. Every command in
-`Program.cs` runs `today.Savor()` in a `finally`, so **even `today complete rm` rewrites the
-state file** — there is no read-only invocation.
+Restore afterwards and prove it with a second `md5sum` that matches, line for line. Every
+command in `Program.cs` runs `today.Savor()` in a `finally`, so **even `today complete rm`
+rewrites the state file** — there is no read-only invocation. A checkpoint that finds no files
+at all means the glob is wrong, not that there is nothing to protect: stop and look.
 
 Prefer not to need the guard at all: exercise changes with `dotnet run -- <args>`, which keeps
 its own state in `bin/Debug/net10.0/` and cannot touch the user's.

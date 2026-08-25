@@ -3,7 +3,7 @@ using System.Reflection;
 namespace Today;
 
 /// <summary>
-///     The styles applied to each part of the output. Persisted as today.theme.json.
+///     The styles applied to each part of the output. Persisted as today.today.theme.json.
 /// </summary>
 /// <remarks>
 ///     Colors are stored by name rather than as a <c>Fansi.BasicColor</c> so the file stays

@@ -32,9 +32,7 @@ public static class Output
 
     private static bool PlainError => NoColor || Console.IsErrorRedirected;
 
-    private static Theme? current;
-
-    public static Theme Current => current ??= Cook.Serve<Theme>();
+    public static Theme Current => Cook.Serve<Theme>();
 
     public static string ColorNames => string.Join(", ", Enum.GetNames<BasicColor>());
 
