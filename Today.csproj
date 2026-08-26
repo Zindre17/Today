@@ -6,12 +6,28 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    
+
     <Version>2.0.0</Version>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>today</ToolCommandName>
     <PackageOutputPath>./nupkg</PackageOutputPath>
+
+    <Title>today</Title>
+    <Description>A command-line day tracker. Start and end named tasks as you work, log the ones you only remember afterwards, and draw the day as a Gantt chart.</Description>
+    <Authors>Zindre</Authors>
+    <PackageTags>cli;dotnet-tool;time-tracking;productivity;gantt;console</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/Zindre17/Today</PackageProjectUrl>
+    <!-- Set explicitly rather than left to SourceLink: the git query is skipped inside a
+         sandboxed session, and this way the package still says where it came from. -->
+    <RepositoryUrl>https://github.com/Zindre17/Today.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Fansi" Version="0.0.3" />

@@ -8,8 +8,8 @@ Storage.Arrange();
 
 var today = Cook.Serve<Today.Today>();
 
-// Every command, described once. `complete commands` takes the names, `help` prints the table
-// and Usage lists them, so adding a command here is the only place it has to be introduced.
+// Every command, described once. `complete commands` takes the names, and `help` prints the table,
+// so adding a command here is the only place it has to be introduced.
 (string Name, string Args, string Does)[] commands =
 [
     ("start", "<what> [when]", "Begin a task. -c ends the others first."),
@@ -244,7 +244,7 @@ int Clear(string[] args)
     }
 }
 
-// Feeds the shell completion script. Deliberately absent from Usage: it is for
+// Feeds the shell completion script. Deliberately absent from Help: it is for
 // scripts, not people. Output is raw, one candidate per line, never themed.
 int Complete(string[] args)
 {

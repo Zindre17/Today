@@ -16,15 +16,10 @@ public static class Storage
     private const string AppName = "today";
 
     /// <summary>
-    ///     Settle where tastes are kept and move in anything an older version left beside
-    ///     the executable. Must run before the first <see cref="Cook.Serve{T}" />: the
-    ///     kitchen cannot be changed afterwards, and a taste served before the move would
+    ///     Settle where tastes are kept and must run before the first <see cref="Cook.Serve{T}" />:
+    ///     the kitchen cannot be changed afterwards, and a taste served before the move would
     ///     be the empty one.
     /// </summary>
-    /// <returns>
-    ///     <see langword="false" /> if a day that could not be read was left behind, in
-    ///     which case the command should not run.
-    /// </returns>
     public static void Arrange()
     {
         Cook.UseKitchen(new Kitchen

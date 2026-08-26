@@ -29,6 +29,12 @@ Styling is suppressed whenever stdout is redirected, so piping into a file or `c
 
 `TreatWarningsAsErrors` is on and `Nullable` is enabled — any nullable warning fails the build.
 
+`README.md` is the user-facing counterpart to this file, and is packed into the nupkg via
+`PackageReadmeFile`, so it doubles as the nuget.org listing — a change visible to someone
+*using* `today` belongs there as well as here. `Today.csproj` also sets `RepositoryUrl`
+explicitly rather than leaving it to SourceLink, so the package still says where it came from
+when the git query is skipped (see the `release` skill on the sandbox and `.gitmodules`).
+
 `Taste` (the persistence library) is a separate repository, `~/code/Taste`, by the same author. A
 change here that needs one there is two sessions, not one — ask before working in it. A `PreToolUse`
 guard enforces that.

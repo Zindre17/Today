@@ -56,6 +56,10 @@ Do not delete them on the user's behalf.
    and tab completion. Cover the error paths and exit codes, not just the happy one.
 2. **Update `CLAUDE.md`** if the change added a command, altered persistence, or changed how
    anything renders. It is the project memory; a stale line there costs every future session.
+   **And `README.md`** if the change is visible to someone *using* the tool — it is packed into
+   the nupkg via `PackageReadmeFile`, so it is also the package's listing on nuget.org. The two
+   have different readers: `CLAUDE.md` explains why the code is shaped the way it is, `README.md`
+   tells a user what to type.
 3. **Bump `<Version>`** in `Today.csproj`. Minor bump for a new command or visible behaviour,
    patch for a fix.
 4. **`dotnet build`** — `TreatWarningsAsErrors` is on, so any nullable warning is a failure.
@@ -66,8 +70,9 @@ Do not delete them on the user's behalf.
    real file. Build with `EnableSourceControlManagerQueries=false` in the environment — MSBuild
    reads env vars as properties, so this needs no change to the csproj.
 5. **Commit.** Explain why the behaviour is what it is, not just what moved.
-6. **`dotnet pack -c Release`** → `./nupkg/Today.<version>.nupkg`. The readme warning is
-   expected and harmless.
+6. **`dotnet pack -c Release`** → `./nupkg/Today.<version>.nupkg`. This should now be warning-free;
+   the readme warning that used to be "expected and harmless" went away when `README.md` and the
+   rest of the package metadata were added to the csproj. A new warning is a real one.
 
    **Ask the user to run this one from their own terminal.** The workaround from step 4 is not
    safe here: with the git query off, `pack` silently omits the `<repository commit="…"/>`
