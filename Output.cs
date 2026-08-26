@@ -74,7 +74,7 @@ public static class Output
     public static void Command(string syntax, string does) =>
         Console.WriteLine($"    {Format(Current.Task, SyntaxWidth).ApplyToText(syntax)}  {does}");
 
-    public static void Date(DateTime date) => Console.WriteLine(Apply(Current.Date, $"{date:yyyy-MM-dd}"));
+    public static void Date(DateOnly date) => Console.WriteLine(Apply(Current.Date, $"{date:yyyy-MM-dd}"));
 
     /// <summary>
     ///     Draws the day as a horizontal Gantt chart: one row per task, time along the x axis.
@@ -84,7 +84,16 @@ public static class Output
     ///     The moment an unfinished task is drawn up to — now for the current day, and the last
     ///     thing that happened for a day out of history.
     /// </param>
-    public static void Chart(IReadOnlyList<Doing> tasks, DateTime reference)
+    /// <remarks>
+    ///     Every measurement below is a <see cref="TimeSpan" /> since midnight rather than a
+    ///     <see cref="TimeOnly" />, for two reasons that both bite. The window's closing edge
+    ///     rounds up to the next whole hour and so can land on 24:00, which is a real position on
+    ///     the axis and not a <c>TimeOnly</c>; and <c>TimeOnly</c> subtraction is circular, so a
+    ///     span measured backwards comes back as roughly 23 hours instead of a negative — turning
+    ///     an obviously broken number into a plausible one. A <c>TimeSpan</c> holds both, and
+    ///     subtracts in a straight line.
+    /// </remarks>
+    public static void Chart(IReadOnlyList<Doing> tasks, TimeOnly reference)
     {
         var theme = Current;
         var width = ChartWidth;
@@ -92,7 +101,7 @@ public static class Output
         var span = (to - from).TotalMinutes;
 
         // Time -> column. The window is whole hours, so both edges land cleanly.
-        int Column(DateTime moment) =>
+        int Column(TimeSpan moment) =>
             Math.Clamp((int)Math.Round((moment - from).TotalMinutes / span * width), 0, width);
 
         Console.WriteLine($"{Indent}{Apply(theme.Axis, Axis(from, to, width, Column))}");
@@ -111,11 +120,11 @@ public static class Output
             foreach (var stretch in task)
             {
                 var finish = Finish(stretch, reference);
-                took += finish - stretch.Start;
+                took += finish - stretch.Start.ToTimeSpan();
 
                 // A stretch shorter than one column still deserves to be visible, including one
                 // that starts on the closing edge of the window.
-                var start = Math.Min(Column(stretch.Start), width - 1);
+                var start = Math.Min(Column(stretch.Start.ToTimeSpan()), width - 1);
                 var end = Column(finish);
                 for (var i = start; i < Math.Max(end, start + 1) && i < width; i++)
                 {
@@ -135,7 +144,7 @@ public static class Output
         }
 
         // The total sits in the same column as the times above it, so it reads as their sum.
-        var total = tasks.Aggregate(TimeSpan.Zero, (sum, task) => sum + (Finish(task, reference) - task.Start));
+        var total = tasks.Aggregate(TimeSpan.Zero, (sum, task) => sum + (Finish(task, reference) - task.Start.ToTimeSpan()));
         Console.WriteLine($"    {Format(new ThemeStyle(), NameWidth).ApplyToText("total")}  {Time(theme.Duration, total)}");
     }
 
@@ -196,32 +205,51 @@ public static class Output
     ///     backwards: a task started after that moment (clock change, or a time given by hand)
     ///     would otherwise measure as negative.
     /// </summary>
-    private static DateTime Finish(Doing task, DateTime reference) =>
-        task.End ?? (reference > task.Start ? reference : task.Start);
+    private static TimeSpan Finish(Doing task, TimeOnly reference)
+    {
+        if (task.End is { } end)
+        {
+            return end.ToTimeSpan();
+        }
+
+        var start = task.Start.ToTimeSpan();
+        var upTo = reference.ToTimeSpan();
+        return upTo > start ? upTo : start;
+    }
+
+    /// <summary>
+    ///     A moment on the day as HH:mm. Written out by hand rather than formatted, because the
+    ///     window's closing edge can be 24:00 and a <see cref="TimeSpan" /> of exactly one day
+    ///     formats its hours component as 00.
+    /// </summary>
+    private static string Clock(TimeSpan moment) => $"{(int)moment.TotalHours:00}:{moment.Minutes:00}";
 
     /// <summary>
     ///     The whole hours spanning every task, so the axis labels land on the hour.
     /// </summary>
-    private static (DateTime From, DateTime To) Window(IReadOnlyList<Doing> tasks, DateTime reference)
+    private static (TimeSpan From, TimeSpan To) Window(IReadOnlyList<Doing> tasks, TimeOnly reference)
     {
-        var earliest = tasks.Min(t => t.Start);
+        var earliest = tasks.Min(t => t.Start.ToTimeSpan());
         var latest = tasks.Max(t => Finish(t, reference));
 
-        var from = earliest.Date.AddHours(earliest.Hour);
-        var to = latest.Date.AddHours(latest.Hour);
+        // Both sit inside the day, so the hours component is the whole hour they fall in.
+        var from = new TimeSpan(earliest.Hours, 0, 0);
+        var to = new TimeSpan(latest.Hours, 0, 0);
         if (to < latest)
         {
-            to = to.AddHours(1);
+            // A day whose last moment is past 23:00 rounds up to 24:00, which is why the window
+            // is measured rather than clocked.
+            to += TimeSpan.FromHours(1);
         }
 
         // A day where everything happened inside one hour still needs a scale.
-        return (from, to > from ? to : from.AddHours(1));
+        return (from, to > from ? to : from + TimeSpan.FromHours(1));
     }
 
     /// <summary>
     ///     The x axis: HH:mm labels at whole-hour ticks, spaced so they never collide.
     /// </summary>
-    private static string Axis(DateTime from, DateTime to, int width, Func<DateTime, int> column)
+    private static string Axis(TimeSpan from, TimeSpan to, int width, Func<TimeSpan, int> column)
     {
         // Labels are left-aligned on their own tick, so the closing one overhangs the chart.
         // ChartWidth reserves the room for it.
@@ -231,12 +259,12 @@ public static class Output
         // The window end anchors the axis: it states where the chart stops, so it is placed
         // first and intermediate ticks give way to it rather than the other way round.
         var end = column(to);
-        $"{to:HH:mm}".CopyTo(0, axis, end, LabelWidth);
+        Clock(to).CopyTo(0, axis, end, LabelWidth);
 
         var step = TickStep((to - from).TotalMinutes, width);
         var occupiedUntil = -1;
 
-        for (var tick = from; tick < to; tick = tick.AddMinutes(step))
+        for (var tick = from; tick < to; tick += TimeSpan.FromMinutes(step))
         {
             var at = column(tick);
 
@@ -245,7 +273,7 @@ public static class Output
                 continue;
             }
 
-            $"{tick:HH:mm}".CopyTo(0, axis, at, LabelWidth);
+            Clock(tick).CopyTo(0, axis, at, LabelWidth);
             occupiedUntil = at + LabelWidth;
         }
 

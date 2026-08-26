@@ -2,5 +2,5 @@ namespace Today;
 
 public record History
 {
-    public Dictionary<DateTime, Day> Days { get; init; } = [];
+    public Dictionary<DateOnly, Day> Days { get; init; } = [];
 }

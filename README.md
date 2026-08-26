@@ -123,13 +123,16 @@ are independent, and setting one leaves the other where it was.
 
 ## Upgrading from 1.x
 
-**2.x moved your state, and nothing moves it for you.** Up to 1.11.0 the files sat next to the
-`today` binary — `~/.dotnet/tools/` for an installed tool. 2.x puts them in the directories
-above under different names. Nothing looks in the old place any more, so after upgrading
-`today show` will report an empty day and `today list` an empty history, with your records still
-sitting where they always were.
+**2.x moved your state and changed how it is written, and nothing does either for you.** Up to
+1.11.0 the files sat next to the `today` binary — `~/.dotnet/tools/` for an installed tool. 2.x
+puts them in the directories above under different names, and stores a day as a plain date with
+plain times (`"2026-08-25"`, `"09:00:00"`) rather than as timestamps carrying a UTC offset. The
+offset was not decoration: it was read back, so opening your day in a different timezone shifted
+every time in it and could file the day under the wrong date entirely.
 
-Move them by hand, once:
+Nothing looks in the old place any more, so after upgrading `today show` reports an empty day and
+`today list` an empty history, with your records still sitting where they always were. Move them
+by hand, once:
 
 ```bash
 mkdir -p ~/.local/share/today ~/.config/today
@@ -139,8 +142,29 @@ mv today.history.json  ~/.local/share/today/today.today.history.json
 mv today.theme.json    ~/.config/today/today.today.theme.json
 ```
 
-The theme file only exists if you ever ran `today theme set`. Nothing is lost if you skip this
-and change your mind later — the old files are only ignored, never deleted.
+Then convert the two day files to the new shape. `today` will not read the old one — it stops
+with a parse error rather than guessing at your records, so do this before running it again:
+
+```bash
+cd ~/.local/share/today
+python3 - today.today.day.json today.today.history.json <<'EOF'
+import json, sys
+d = lambda v: v.split("T")[0]
+t = lambda v: v and v.split("T")[1].split("+")[0].split("Z")[0]
+def day(x):
+    x["Date"] = d(x["Date"])
+    for k in x["Tasks"]: k["Start"], k["End"] = t(k["Start"]), t(k["End"])
+    return x
+for p in sys.argv[1:]:
+    j = json.load(open(p))
+    j = {"Days": {d(k): day(v) for k, v in j["Days"].items()}} if "Days" in j else day(j)
+    json.dump(j, open(p, "w"))
+EOF
+```
+
+The theme file needs neither step's attention beyond the move — it holds no dates — and only
+exists if you ever ran `today theme set`. Nothing is lost if you skip all of this and change your
+mind later: the old files are only ignored, never deleted.
 
 ## Shell completion
 

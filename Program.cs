@@ -65,7 +65,7 @@ int Dispatch(Target target, string[] arguments) => arguments switch
 // history is complete even on days where nothing was ever started.
 Target RollOverIfNewDay(Day day)
 {
-    if (day.Date.Date == DateTime.Now.Date)
+    if (day.Date == DateOnly.FromDateTime(DateTime.Now))
     {
         return Target.Current(day);
     }
@@ -134,7 +134,7 @@ void WarnAboutUnfinished(Day day)
 ///     quietly breaking all three. A moment still to come is refused too: this records what
 ///     happened.
 /// </summary>
-bool TryParseWhen(Target target, string arg, out DateTime when)
+bool TryParseWhen(Target target, string arg, out TimeOnly when)
 {
     when = default;
 
@@ -148,31 +148,37 @@ bool TryParseWhen(Target target, string arg, out DateTime when)
         return false;
     }
 
-    var day = target.Day.Date.Date;
-    when = parsed.Date == default(DateTime).Date ? day + parsed.TimeOfDay : parsed;
-
-    if (when.Date != day)
+    // A date spelled out has to be the day being worked on. A bare time needs no such check —
+    // it cannot name a day, which is the whole reason a task keeps only a TimeOnly.
+    if (parsed.Date != default(DateTime).Date && DateOnly.FromDateTime(parsed) != target.Day.Date)
     {
-        var named = target.IsToday ? "today" : $"{day:yyyy-MM-dd}";
-        Output.Error($"{when:yyyy-MM-dd} is not {named}, and a day only holds its own tasks.");
-        when = default;
+        var named = target.IsToday ? "today" : $"{target.Day.Date:yyyy-MM-dd}";
+        Output.Error($"{parsed:yyyy-MM-dd} is not {named}, and a day only holds its own tasks.");
         return false;
     }
 
-    // A time typed by hand is precise to the minute, so compare by the minute: the one in
-    // progress counts as now, and only a later one is the future. Anything finer would reject
-    // `start x 14:23` for the seconds it took to type it. A past day never trips this.
-    var now = DateTime.Now;
-    if (ToMinute(when) > ToMinute(now))
+    when = TimeOnly.FromTimeSpan(parsed.TimeOfDay);
+
+    // Only today can hold a time that has not happened. On a past day every time already has,
+    // and without a date to compare there is nothing that would say so -- 17:30 would read as
+    // the future purely because it is later than the clock right now.
+    if (target.IsToday)
     {
-        Output.Error($"{when:HH:mm} has not happened yet — it is {now:HH:mm}.");
-        when = default;
-        return false;
+        // A time typed by hand is precise to the minute, so compare by the minute: the one in
+        // progress counts as now, and only a later one is the future. Anything finer would
+        // reject `start x 14:23` for the seconds it took to type it.
+        var now = TimeOnly.FromDateTime(DateTime.Now);
+        if (ToMinute(when) > ToMinute(now))
+        {
+            Output.Error($"{when:HH:mm} has not happened yet — it is {now:HH:mm}.");
+            when = default;
+            return false;
+        }
     }
 
     return true;
 
-    static DateTime ToMinute(DateTime moment) => moment.AddTicks(-(moment.Ticks % TimeSpan.TicksPerMinute));
+    static TimeOnly ToMinute(TimeOnly moment) => new(moment.Hour, moment.Minute);
 }
 
 /// <summary>
@@ -180,9 +186,9 @@ bool TryParseWhen(Target target, string arg, out DateTime when)
 ///     already past has no "now" on it, and defaulting to the real one would put the task on the
 ///     wrong day — which <see cref="TryParseWhen" /> exists to prevent.
 /// </summary>
-bool TryDefaultWhen(Target target, out DateTime when)
+bool TryDefaultWhen(Target target, out TimeOnly when)
 {
-    when = DateTime.Now;
+    when = TimeOnly.FromDateTime(DateTime.Now);
 
     if (target.IsToday)
     {
@@ -199,9 +205,9 @@ bool TryDefaultWhen(Target target, out DateTime when)
 ///     a moment and may be any day. <see cref="History.Days" /> is keyed by midnight, so a time
 ///     typed alongside the date is dropped — carrying it through would silently match nothing.
 /// </summary>
-bool TryParseDay(string arg, out DateTime day)
+bool TryParseDay(string arg, out DateOnly day)
 {
-    var now = DateTime.Now.Date;
+    var now = DateOnly.FromDateTime(DateTime.Now);
 
     if (string.Equals(arg, "yesterday", StringComparison.OrdinalIgnoreCase))
     {
@@ -230,7 +236,7 @@ bool TryParseDay(string arg, out DateTime day)
         return false;
     }
 
-    day = parsed.Date;
+    day = DateOnly.FromDateTime(parsed);
     return true;
 }
 
@@ -388,7 +394,7 @@ int Complete(Target target, string[] arguments)
             var history = Cook.Serve<History>();
             foreach (var key in history.Days.Keys)
             {
-                Console.WriteLine($"{key.Date:yyyy-MM-dd}");
+                Console.WriteLine($"{key:yyyy-MM-dd}");
             }
             return 0;
 
@@ -554,15 +560,18 @@ int Did(Target target, string[] arguments)
         return 1;
     }
 
-    var start = end - duration;
-
     // The other way a task can land outside the day it is logged on. It hides better than a
-    // date typed by hand does, since the times reported back are only ever HH:mm.
-    if (start.Date != end.Date)
+    // date typed by hand does, since the times reported back are only ever HH:mm. Asked of the
+    // duration rather than of the result, because backing a TimeOnly past midnight wraps it to
+    // the far end of the same day instead of failing.
+    var sinceMidnight = end.ToTimeSpan();
+    if (duration > sinceMidnight)
     {
         Output.Error($"{length} reaches back past midnight, and a day only holds its own tasks.");
         return 1;
     }
+
+    var start = TimeOnly.FromTimeSpan(sinceMidnight - duration);
 
     if (!target.Day.Did(what, start, end))
     {
@@ -575,7 +584,7 @@ int Did(Target target, string[] arguments)
 
 // The optional time argument, wherever it sits in a command's positional list. Given, it has to
 // be a moment on the day being worked on; left out, it is now -- which only today has.
-bool TryWhen(Target target, string[] positional, int index, out DateTime when) =>
+bool TryWhen(Target target, string[] positional, int index, out TimeOnly when) =>
     positional.Length > index
         ? TryParseWhen(target, positional[index], out when)
         : TryDefaultWhen(target, out when);
@@ -629,7 +638,7 @@ int On(Target current, string[] arguments)
         return 1;
     }
 
-    if (date == DateTime.Now.Date)
+    if (date == DateOnly.FromDateTime(DateTime.Now))
     {
         return Dispatch(current, [command, .. rest]);
     }
@@ -652,7 +661,7 @@ int Show(Target target, string[] arguments)
             return 1;
         }
 
-        if (date == DateTime.Now.Date)
+        if (date == DateOnly.FromDateTime(DateTime.Now))
         {
             target = Target.Current(target.Day);
         }
@@ -678,7 +687,7 @@ int Show(Target target, string[] arguments)
     Output.Header(target.IsToday ? $"Today {day.Date:dd MMM}" : $"{day.Date:dd MMM yyyy}");
     Output.Blank();
     // A day out of history has no "now" to draw an unfinished task up to.
-    Output.Chart(day.Tasks, target.IsToday ? DateTime.Now : day.Tasks.Max(t => t.End ?? t.Start));
+    Output.Chart(day.Tasks, target.IsToday ? TimeOnly.FromDateTime(DateTime.Now) : day.Tasks.Max(t => t.End ?? t.Start));
     Output.Blank();
     return 0;
 }

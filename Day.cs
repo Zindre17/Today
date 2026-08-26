@@ -2,18 +2,18 @@ namespace Today;
 
 public class Day
 {
-    public DateTime Date { get; set; } = DateTime.Now.Date;
+    public DateOnly Date { get; set; } = DateOnly.FromDateTime(DateTime.Now);
 
     public List<Doing> Tasks { get; set; } = [];
 
-    public bool Start(string what, DateTime? when)
+    public bool Start(string what, TimeOnly when)
     {
         if (Tasks.Any(IsAlreadyDoing))
         {
             Output.Error($"You are already doing {what}.");
             return false;
         }
-        var doing = Insert(new Doing(what, when ?? DateTime.Now));
+        var doing = Insert(new Doing(what, when));
         Output.Success($"Started doing {doing.What} at {doing.Start:HH:mm}");
         return true;
 
@@ -26,7 +26,7 @@ public class Day
     ///     afterwards. Unlike <see cref="Start" /> it does not mind a task of the same name
     ///     running: logging what you just did says nothing about what you are doing.
     /// </summary>
-    public bool Did(string what, DateTime start, DateTime end)
+    public bool Did(string what, TimeOnly start, TimeOnly end)
     {
         if (end < start)
         {
@@ -62,7 +62,7 @@ public class Day
         return true;
     }
 
-    public bool End(string? what, DateTime? when = null)
+    public bool End(string? what, TimeOnly when)
     {
         var doing = what is null
             ? Tasks.LastOrDefault(d => d.End is null)
@@ -75,14 +75,13 @@ public class Day
             return false;
         }
 
-        var end = when ?? DateTime.Now;
-        if (end < doing.Start)
+        if (when < doing.Start)
         {
-            Output.Error($"Cannot end {doing.What} at {end:HH:mm} because it started at {doing.Start:HH:mm}.");
+            Output.Error($"Cannot end {doing.What} at {when:HH:mm} because it started at {doing.Start:HH:mm}.");
             return false;
         }
 
-        doing.End = end;
+        doing.End = when;
         Output.Success($"You did {doing.What} from {doing.Start:HH:mm} to {doing.End:HH:mm}");
         return true;
     }
@@ -97,7 +96,7 @@ public class Day
         return doing;
     }
 
-    public void EndAll(DateTime when)
+    public void EndAll(TimeOnly when)
     {
         foreach (var task in Tasks.Where(t => t.End is null && t.Start <= when))
         {
