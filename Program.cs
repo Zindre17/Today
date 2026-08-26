@@ -39,7 +39,7 @@ try
         ["help" or "--help" or "-h", ..] => Help(),
         ["version" or "--version", ..] => Version(),
         [var c, ..] => NotACommand(c),
-        [] => Usage()
+        [] => Help()
     };
 }
 finally
@@ -300,20 +300,12 @@ int Version()
     return 0;
 }
 
-// Printed when there is nothing to act on, so it goes to stderr at exit 1 -- unlike `help`,
-// which is what the user asked for.
-int Usage()
-{
-    Output.Error($"Available commands are {string.Join(" ", commands.Select(c => $"\'{c.Name}\'"))}.");
-    Output.Error("Run 'today help' for what each one takes.");
-    return 1;
-}
-
 int NotACommand(string command)
 {
     Output.Error($"'{command}' is not a command.");
     Output.Blank();
-    return Usage();
+    Help();
+    return 1;
 }
 
 int Start(string[] args)
