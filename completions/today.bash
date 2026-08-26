@@ -8,8 +8,7 @@
 # of what the commands are, and `today end <TAB>` offers exactly the tasks that
 # are running right now -- `today rm <TAB>`, everything on the day.
 
-_today()
-{
+_today() {
     local cur cmd names i argc
     cur=${COMP_WORDS[COMP_CWORD]}
     cmd=${COMP_WORDS[1]}
@@ -19,7 +18,7 @@ _today()
         return
     fi
 
-    [[ $cmd == end || $cmd == rm ]] || return
+    [[ $cmd == end || $cmd == rm || $cmd == show ]] || return
 
     # `end <what> [when]` and `rm <what>` -- only the first argument is a task name.
     argc=0
@@ -35,13 +34,13 @@ _today()
     # backslash-escaped. Strip that to match, then put it back on the result.
     local quote="" typed=$cur
     case $typed in
-        \"* | \'*)
-            quote=${typed:0:1}
-            typed=${typed:1}
-            ;;
-        *)
-            typed=${typed//\\ / }
-            ;;
+    \"* | \'*)
+        quote=${typed:0:1}
+        typed=${typed:1}
+        ;;
+    *)
+        typed=${typed//\\ / }
+        ;;
     esac
 
     local IFS=$'\n'

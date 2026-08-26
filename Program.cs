@@ -271,6 +271,14 @@ int Complete(string[] args)
             }
             return 0;
 
+        case ["show", ..]:
+            var history = Cook.Serve<History>();
+            foreach (var key in history.Days.Keys)
+            {
+                Console.WriteLine($"{key.Date:yyyy-MM-dd}");
+            }
+            return 0;
+
         default:
             return 1;
     }
