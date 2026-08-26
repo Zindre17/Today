@@ -20,9 +20,15 @@ var today = Cook.Serve<Today.Today>();
     ("list", "", "The days kept in history."),
     ("clear", "today | history [date]", "Forget today, or a day of history."),
     ("theme", "[show | set | reset]", "Color the output."),
+    ("completion", "<shell>", "Print the shell completion script."),
     ("help", "", "What you are reading."),
     ("version", "", "Which version this is."),
 ];
+
+// The shells `completion` can emit a script for. Kept in one place so the command and its own
+// tab-completion cannot disagree about what is supported; each name pairs with an embedded
+// resource called `completion.<shell>`.
+string[] shells = ["bash"];
 
 try
 {
@@ -39,6 +45,7 @@ try
         ["list", ..] => ListHistory(),
         ["theme", .. var rest] => ThemeCommand(rest),
         ["complete", .. var rest] => Complete(rest),
+        ["completion", .. var rest] => Completion(rest),
         ["help" or "--help" or "-h", ..] => Help(),
         ["version" or "--version", ..] => Version(),
         [var c, ..] => NotACommand(c),
@@ -282,9 +289,51 @@ int Complete(string[] args)
             }
             return 0;
 
+        case ["completion", ..]:
+            foreach (var shell in shells)
+            {
+                Console.WriteLine(shell);
+            }
+            return 0;
+
         default:
             return 1;
     }
+}
+
+// `today completion <shell>`: prints the completion script that ships inside the binary. The
+// script is an embedded resource rather than a file beside the tool, because someone who
+// installed with `dotnet tool install` has no checkout to copy one out of. Written raw to
+// stdout like Complete -- it is meant to be redirected or eval'd, not read.
+int Completion(string[] args)
+{
+    var positional = args.Where(a => !IsFlag(a)).ToArray();
+
+    if (positional is not [var shell, ..])
+    {
+        Output.Error($"Say which shell, as in: today completion {shells[0]}. Available: {string.Join(", ", shells)}");
+        return 1;
+    }
+
+    if (!shells.Contains(shell))
+    {
+        Output.Error($"There is no completion script for '{shell}'. Available: {string.Join(", ", shells)}.");
+        return 1;
+    }
+
+    using var script = Assembly.GetExecutingAssembly().GetManifestResourceStream($"completion.{shell}");
+
+    if (script is null)
+    {
+        Output.Error($"The {shell} completion script is missing from this build.");
+        return 1;
+    }
+
+    // Copied bytes-as-they-are rather than read as text: this is a script, and re-encoding it
+    // is a way to change it.
+    using var stdout = Console.OpenStandardOutput();
+    script.CopyTo(stdout);
+    return 0;
 }
 
 // `today help`: every command, what it takes and what it does. Goes to stdout and exits 0 --

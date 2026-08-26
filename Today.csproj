@@ -30,6 +30,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Shipped inside the binary so `today completion bash` can print it: someone who
+         installed the tool has no checkout to copy it from. The file stays the editable
+         source, so there is no second copy to drift. -->
+    <EmbeddedResource Include="completions/today.bash" LogicalName="completion.bash" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Fansi" Version="0.0.3" />
     <PackageReference Include="Taste" Version="2.1.0" />
   </ItemGroup>

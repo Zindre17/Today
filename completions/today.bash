@@ -18,7 +18,7 @@ _today() {
         return
     fi
 
-    [[ $cmd == end || $cmd == rm || $cmd == show ]] || return
+    [[ $cmd == end || $cmd == rm || $cmd == show || $cmd == completion ]] || return
 
     # `end <what> [when]` and `rm <what>` -- only the first argument is a task name.
     argc=0
