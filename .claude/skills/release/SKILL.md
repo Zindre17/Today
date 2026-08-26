@@ -14,7 +14,7 @@ because the thing the user runs is the shim in `~/.dotnet/tools`, not `bin/Debug
 `Taste`'s default:
 
 ```
-~/.local/share/today/today.today.today.json      # today, the one that matters
+~/.local/share/today/today.today.day.json        # today, the one that matters
 ~/.local/share/today/today.today.history.json    # past days
 ~/.config/today/today.today.theme.json           # only exists once `theme set` has run
 ```
@@ -40,9 +40,13 @@ done
 md5sum ~/.local/share/today/*.json ~/.config/today/*.json 2>/dev/null
 ```
 
-Restore afterwards and prove it with a second `md5sum` that matches, line for line. Every
-command in `Program.cs` runs `today.Savor()` in a `finally`, so **even `today complete rm`
-rewrites the state file** — there is no read-only invocation.
+Restore afterwards and prove it with a second `md5sum` that matches, line for line.
+
+Since 2.1 a command writes only when it changes something: `show`, `list`, `complete` and every
+failed command leave the files alone, where the old `finally` had all of them rewriting the day.
+That makes a read-only invocation genuinely read-only — but it is not a reason to skip the
+checkpoint. What you are guarding against is a command that turns out to mutate when you thought
+it would not, and that is precisely the case you cannot predict in advance.
 
 **Pre-2.0 files may still sit beside the shim** — `~/.dotnet/tools/today.{today,history,theme}.json`.
 There is no migration code: the move into the OS directories was done by hand, once. Nothing
@@ -69,24 +73,38 @@ Do not delete them on the user's behalf.
    unreadable `/dev/null` bind-mount, and SourceLink's git task cannot tell that apart from a
    real file. Build with `EnableSourceControlManagerQueries=false` in the environment — MSBuild
    reads env vars as properties, so this needs no change to the csproj.
+
+   **Step 3 makes this build the first one that restores**, and restore then fails a second way:
+   `NU1900: Error occurred while getting package vulnerability data: Read-only file system` for
+   `~/.local/share/NuGet/http-cache`. The sandbox allows `~/.nuget` but not that path, and
+   `TreatWarningsAsErrors` promotes NU1900 to an error. Point the cache somewhere writable:
+
+   ```bash
+   export NUGET_HTTP_CACHE_PATH="$CLAUDE_JOB_DIR/tmp/nuget-http"
+   ```
+
+   It only bites after a version or package change, so a build that worked before the bump is no
+   evidence it will work after one.
 5. **Commit.** Explain why the behaviour is what it is, not just what moved.
 6. **`dotnet pack -c Release`** → `./nupkg/Today.<version>.nupkg`. This should now be warning-free;
    the readme warning that used to be "expected and harmless" went away when `README.md` and the
    rest of the package metadata were added to the csproj. A new warning is a real one.
 
    **Ask the user to run this one from their own terminal.** The workaround from step 4 is not
-   safe here: with the git query off, `pack` silently omits the `<repository commit="…"/>`
-   element from the nuspec, so the published package loses its link back to the source commit.
-   The csproj declares no `RepositoryUrl`, so that element comes from the git query and nothing
-   else. Compare `1.11.0` (packed outside a sandbox, has it) against `2.0.0` (packed inside one,
-   does not) if you need to see the difference. Verify what you shipped:
+   safe here: with the git query off, `pack` silently drops the `commit` attribute from the
+   nuspec's `<repository>` element, so the published package loses its link back to the source
+   commit. The csproj sets `RepositoryUrl` and `RepositoryType` explicitly, so the element
+   itself survives — it is the commit hash, and only that, which comes from the git query.
+   Compare `1.11.0` (packed outside a sandbox, has it) against `2.0.0` (packed inside one, does
+   not) if you need to see the difference. Verify what you shipped:
 
    ```bash
    unzip -p ./nupkg/Today.<version>.nupkg Today.nuspec | grep -i repository
    ```
 
-   No output means the commit stamp is missing and the package should be repacked outside the
-   sandbox.
+   A `<repository>` line with no `commit="…"` means the stamp is missing and the package should
+   be repacked outside the sandbox. Pack from a commit, too — a stamp pointing at a commit that
+   predates the code in the package is worse than none.
 7. **Reinstall**, with the checkpoint from above already taken. Afterwards check that
    `today show` still has the user's day — the shim is replaced, but the state it reads lives
    in the OS directories and should be untouched by the reinstall:

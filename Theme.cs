@@ -30,6 +30,8 @@ public record Theme
 
     public ThemeStyle Success { get; set; } = new() { Color = "Green" };
 
+    public ThemeStyle Warning { get; set; } = new() { Color = "BrightYellow" };
+
     public ThemeStyle Error { get; set; } = new() { Color = "BrightRed" };
 
     public static IEnumerable<string> ElementNames => Elements.Select(p => p.Name.ToLowerInvariant());

@@ -18,8 +18,11 @@ By default `today` is shimmed to `dotnet run` against the repo, with TODAY_DATA_
 TODAY_CONFIG_DIR pointed at a throwaway directory so the user's real tracked day cannot
 be touched. Those overrides are the isolation: since 2.0 the state a dev build reads is
 the same state the installed tool reads. With --installed the real global tool is used
-and its JSON state is checkpointed and restored around the run -- every `today` command
-Savors state in a `finally`, so even `complete` rewrites the file.
+and its JSON state is checkpointed and restored around the run.
+
+Since 2.1 `complete` no longer rewrites the day -- a command writes only when it changes
+something -- so the checkpoint is defence against being wrong about which commands those
+are, rather than against a `finally` that wrote on every path.
 """
 
 import os
@@ -49,7 +52,7 @@ def state_files():
         os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"), "today"
     )
     return [
-        os.path.join(data, "today.today.today.json"),
+        os.path.join(data, "today.today.day.json"),
         os.path.join(data, "today.today.history.json"),
         os.path.join(config, "today.today.theme.json"),
     ]

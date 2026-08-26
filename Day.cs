@@ -1,6 +1,6 @@
 namespace Today;
 
-public class Today
+public class Day
 {
     public DateTime Date { get; set; } = DateTime.Now.Date;
 

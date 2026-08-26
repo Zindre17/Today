@@ -6,7 +6,11 @@
 #
 # Candidates come from `today complete ...`, so the shell never has its own idea
 # of what the commands are, and `today end <TAB>` offers exactly the tasks that
-# are running right now -- `today rm <TAB>`, everything on the day.
+# are running right now -- `today rm <TAB>`, everything on the day, and
+# `today on <TAB>`, the days in history.
+#
+# Only the first argument of a command is completed, so `today on <date> end <TAB>`
+# offers nothing rather than offering today's tasks for another day's command.
 
 _today() {
     local cur cmd names i argc
@@ -18,7 +22,7 @@ _today() {
         return
     fi
 
-    [[ $cmd == end || $cmd == rm || $cmd == show || $cmd == completion ]] || return
+    [[ $cmd == end || $cmd == rm || $cmd == show || $cmd == completion || $cmd == on ]] || return
 
     # `end <what> [when]` and `rm <what>` -- only the first argument is a task name.
     argc=0

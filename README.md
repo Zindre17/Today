@@ -45,9 +45,11 @@ today start standup -c         # begin one, ending whatever else was running
 today end                      # finish the most recent
 today end writing 14:30        # or a named one, at a given time
 today did "code review" 45m    # log something already over
+today did lunch 1h 12:30       # or one that ended earlier
 today rm standup               # remove one logged by mistake
+today on yesterday end writing 17:00   # fix a day you already filed away
 today show                     # the chart above
-today show 2026-08-24          # a day out of history
+today show yesterday           # a day out of history
 today list                     # which days are kept
 ```
 
@@ -55,8 +57,9 @@ today list                     # which days are kept
 |---|---|---|
 | `start` | `<what> [when]` | Begin a task. `-c` ends the others first. |
 | `end` | `[what] [when]` | Finish a task, or the newest one. |
-| `did` | `<what> <duration>` | Log one already over: `15m`, `1h30m`. |
+| `did` | `<what> <duration> [when]` | Log one already over: `15m`, `1h30m`. |
 | `rm` | `<what>` | Delete a task logged by mistake. |
+| `on` | `<date> <command>` | Run one of the above against a past day. |
 | `show` | `[date]` | Draw the day as a Gantt chart. |
 | `list` | | The days kept in history. |
 | `clear` | `today \| history [date]` | Forget today, or a day of history. |
@@ -65,12 +68,41 @@ today list                     # which days are kept
 | `help` | | The list above. |
 | `version` | | Which version this is. |
 
-A time is `14:30` or anything `DateTime.Parse` accepts, and has to be a moment on today that has
-already happened — this records what you did, not what you plan to. A duration is a run of
-number-and-unit pairs: `45s`, `15m`, `2h`, `1h30m`.
+A time is `14:30` or anything `DateTime.Parse` accepts, and has to be a moment on the day you
+are working on that has already happened — this records what you did, not what you plan to. A
+duration is a run of number-and-unit pairs: `45s`, `15m`, `2h`, `1h30m`.
+
+A date is `2026-08-24`, or `yesterday`, or a weekday name. A weekday means the most recent one it
+fell on, and never today — `wednesday` on a Wednesday is the one a week back, since today is
+already where you are.
 
 Days roll over on their own. The first command you run on a new day files yesterday into history
 and starts you fresh.
+
+## Fixing a day you already filed away
+
+If a day ended with a task still running, the first command you run the next morning tells you so,
+and tells you how to put it right:
+
+```
+2026-08-25 was archived with 'writing' still running.
+An unfinished task is measured only up to the last thing that happened that day, so that day's total is short.
+Give it an end with: today on 2026-08-25 end writing <time>
+```
+
+Nothing is invented on your behalf — an end time `today` made up would be indistinguishable from
+one you recorded. `on <date>` puts `start`, `end`, `did`, `rm` and `show` to work on a day that has
+already gone into history:
+
+```bash
+today on yesterday end writing 17:00     # the one you forgot to close
+today on tuesday did "code review" 45m 15:00
+today on friday rm typo
+today on yesterday show
+```
+
+Because a past day has no "now", the time is not optional there — `today on yesterday start x`
+asks you for one rather than guessing.
 
 ## Where your day is kept
 
@@ -91,18 +123,18 @@ are independent, and setting one leaves the other where it was.
 
 ## Upgrading from 1.x
 
-**2.0 moved your state, and nothing moves it for you.** Up to 1.11.0 the files sat next to the
-`today` binary — `~/.dotnet/tools/` for an installed tool. 2.0 puts them in the directories
-above, and the file names each gained a segment. Nothing looks in the old place any more, so
-after upgrading `today show` will report an empty day and `today list` an empty history, with
-your records still sitting where they always were.
+**2.x moved your state, and nothing moves it for you.** Up to 1.11.0 the files sat next to the
+`today` binary — `~/.dotnet/tools/` for an installed tool. 2.x puts them in the directories
+above under different names. Nothing looks in the old place any more, so after upgrading
+`today show` will report an empty day and `today list` an empty history, with your records still
+sitting where they always were.
 
 Move them by hand, once:
 
 ```bash
 mkdir -p ~/.local/share/today ~/.config/today
 cd ~/.dotnet/tools
-mv today.today.json    ~/.local/share/today/today.today.today.json
+mv today.today.json    ~/.local/share/today/today.today.day.json
 mv today.history.json  ~/.local/share/today/today.today.history.json
 mv today.theme.json    ~/.config/today/today.today.theme.json
 ```

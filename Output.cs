@@ -60,6 +60,15 @@ public static class Output
         Console.Error.WriteLine(Format(Current.Error, plain: PlainError).ApplyToText(text));
 
     /// <summary>
+    ///     Something worth knowing that is not a failure: the command carries on and its exit
+    ///     code is unchanged. Shares stderr with <see cref="Error" /> for the same reason —
+    ///     it is commentary, not part of what the command was asked to produce — but styles
+    ///     itself apart, so it is not mistaken for the command having gone wrong.
+    /// </summary>
+    public static void Warn(string text) =>
+        Console.Error.WriteLine(Format(Current.Warning, plain: PlainError).ApplyToText(text));
+
+    /// <summary>
     ///     One line of `today help`: the command with its arguments, then what it does.
     /// </summary>
     public static void Command(string syntax, string does) =>

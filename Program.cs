@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Reflection;
 using Taste;
 using Taste.Savoring;
@@ -6,16 +7,15 @@ using Today;
 // Settles where state is kept. Has to come first: the kitchen cannot be changed once a taste is served.
 Storage.Arrange();
 
-var today = Cook.Serve<Today.Today>();
-
 // Every command, described once. `complete commands` takes the names, and `help` prints the table,
 // so adding a command here is the only place it has to be introduced.
 (string Name, string Args, string Does)[] commands =
 [
     ("start", "<what> [when]", "Begin a task. -c ends the others first."),
     ("end", "[what] [when]", "Finish a task, or the newest one."),
-    ("did", "<what> <duration>", "Log one already over: 15m, 1h30m."),
+    ("did", "<what> <duration> [when]", "Log one already over: 15m, 1h30m."),
     ("rm", "<what>", "Delete a task logged by mistake."),
+    ("on", "<date> <command>", "Run one of the above against a past day."),
     ("show", "[date]", "Draw the day as a Gantt chart."),
     ("list", "", "The days kept in history."),
     ("clear", "today | history [date]", "Forget today, or a day of history."),
@@ -30,80 +30,139 @@ var today = Cook.Serve<Today.Today>();
 // resource called `completion.<shell>`.
 string[] shells = ["bash"];
 
-try
-{
-    RollOverIfNewDay();
+// What `on` will run against a past day. The rest are left out for want of a meaning rather than
+// out of caution: `list` and `theme` are not about a day at all, `clear` and `completion` already
+// say which day or shell they act on, and `help`/`version` would only be answering the same thing
+// twice. `on` is absent from its own list, which is what refuses `on monday on tuesday ...`.
+string[] amendable = ["start", "end", "did", "rm", "show"];
 
-    return args switch
-    {
-        ["start", .. var rest] => Start(rest),
-        ["end", .. var rest] => End(rest),
-        ["did", .. var rest] => Did(rest),
-        ["rm", .. var rest] => Remove(rest),
-        ["show", .. var rest] => Show(rest),
-        ["clear", .. var rest] => Clear(rest),
-        ["list", ..] => ListHistory(),
-        ["theme", .. var rest] => ThemeCommand(rest),
-        ["complete", .. var rest] => Complete(rest),
-        ["completion", .. var rest] => Completion(rest),
-        ["help" or "--help" or "-h", ..] => Help(),
-        ["version" or "--version", ..] => Version(),
-        [var c, ..] => NotACommand(c),
-        [] => Help()
-    };
-}
-finally
+var current = RollOverIfNewDay(Cook.Serve<Day>());
+
+return Dispatch(current, args);
+
+// The day a command is given is passed to it rather than reached for, so that `on` can hand one
+// command a different day without changing what any of the others mean.
+int Dispatch(Target target, string[] arguments) => arguments switch
 {
-    today.Savor();
-}
+    ["start", .. var rest] => Start(target, rest),
+    ["end", .. var rest] => End(target, rest),
+    ["did", .. var rest] => Did(target, rest),
+    ["rm", .. var rest] => Remove(target, rest),
+    ["on", .. var rest] => On(target, rest),
+    ["show", .. var rest] => Show(target, rest),
+    ["clear", .. var rest] => Clear(target, rest),
+    ["list", ..] => ListHistory(),
+    ["theme", .. var rest] => ThemeCommand(rest),
+    ["complete", .. var rest] => Complete(target, rest),
+    ["completion", .. var rest] => Completion(rest),
+    ["help" or "--help" or "-h", ..] => Help(),
+    ["version" or "--version", ..] => Version(),
+    [var c, ..] => NotACommand(c),
+    [] => Help()
+};
 
 // Archives the previous day as soon as any command runs on a new day, so that
 // history is complete even on days where nothing was ever started.
-void RollOverIfNewDay()
+Target RollOverIfNewDay(Day day)
 {
-    if (today.Date.Date == DateTime.Now.Date)
+    if (day.Date.Date == DateTime.Now.Date)
+    {
+        return Target.Current(day);
+    }
+
+    // A day without tasks is not worth remembering.
+    if (day.Tasks.Count > 0)
+    {
+        var history = Cook.Serve<History>();
+        history.Days[day.Date] = day;
+        history.Savor();
+
+        WarnAboutUnfinished(day);
+    }
+
+    // The fresh day is written here and not left to the command that follows. Nothing else will
+    // do it — a command that only reads keeps nothing — and a stale day left in the jar would be
+    // archived again, and warned about again, on every command until something happened to be
+    // logged.
+    var fresh = Target.Current(new Day());
+    fresh.Keep();
+    return fresh;
+}
+
+/// <summary>
+///     Says so when a day is archived with something still running.
+/// </summary>
+/// <remarks>
+///     This is the only moment the tool knows a task is running on a day that is ending. Left
+///     unsaid it goes into history with no end at all, and <see cref="Output.Chart" /> measures
+///     an unfinished task only up to the last thing that happened on its day — which is usually
+///     that task itself, being the one that was forgotten, so it draws as a single cell worth
+///     nothing and the day totals short with nothing saying how much is missing.
+///     Saying so is all that is done about it: an end that was invented — midnight, or the last
+///     known moment — is a number that would later be read as something recorded. It fires once,
+///     since the next rollover is a no-op, which is why it names the day, the task and the way to
+///     put it right in one go.
+/// </remarks>
+void WarnAboutUnfinished(Day day)
+{
+    var unfinished = day.Tasks.Where(t => t.End is null).Select(t => t.What).Distinct().ToArray();
+
+    if (unfinished is [])
     {
         return;
     }
 
-    // A day without tasks is not worth remembering.
-    if (today.Tasks.Count > 0)
-    {
-        var history = Cook.Serve<History>();
-        history.Days[today.Date] = today;
-        history.Savor();
-    }
+    Output.Warn($"{day.Date:yyyy-MM-dd} was archived with {Names(unfinished)} still running.");
+    Output.Warn("An unfinished task is measured only up to the last thing that happened that day, so that day's total is short.");
+    Output.Warn($"Give it an end with: today on {day.Date:yyyy-MM-dd} end {Shell(unfinished[0])} <time>");
 
-    today = new Today.Today();
+    // Names can contain spaces, so each is quoted rather than run together.
+    static string Names(string[] names) =>
+        names is [var only]
+            ? $"'{only}'"
+            : $"{string.Join(", ", names[..^1].Select(n => $"'{n}'"))} and '{names[^1]}'";
+
+    // The suggested command is meant to be typed, so a name with a space in it is quoted the way
+    // a shell needs rather than the way prose does.
+    static string Shell(string name) => name.Any(char.IsWhiteSpace) ? $"\"{name}\"" : name;
 }
 
 /// <summary>
-///     A moment on the day being tracked. Every task belongs to the day it is logged on —
-///     <see cref="Today.Today.Date" /> says so, <see cref="History" /> is keyed by it, and the
-///     chart's window is drawn from it — so a moment outside today is refused rather than
+///     A moment on the day being worked on. Every task belongs to a single day —
+///     <see cref="Day.Date" /> says so, <see cref="History" /> is keyed by it, and the
+///     chart's window is drawn from it — so a moment outside that day is refused rather than
 ///     quietly breaking all three. A moment still to come is refused too: this records what
 ///     happened.
 /// </summary>
-bool TryParseWhen(string arg, out DateTime when)
+bool TryParseWhen(Target target, string arg, out DateTime when)
 {
-    if (!DateTime.TryParse(arg, out when))
+    when = default;
+
+    // NoCurrentDateDefault leaves a string that named no date sitting on 0001-01-01, which is the
+    // only way to tell a bare `17:30` from one that spelled a date out. It matters because a bare
+    // time means a time on the day being worked on, and that is only today when today is what is
+    // being worked on.
+    if (!DateTime.TryParse(arg, CultureInfo.CurrentCulture, DateTimeStyles.NoCurrentDateDefault, out var parsed))
     {
         Output.Error($"'{arg}' is not a valid time. Try 14:30, or 2:30pm.");
         return false;
     }
 
-    var now = DateTime.Now;
+    var day = target.Day.Date.Date;
+    when = parsed.Date == default(DateTime).Date ? day + parsed.TimeOfDay : parsed;
 
-    if (when.Date != now.Date)
+    if (when.Date != day)
     {
-        Output.Error($"{when:yyyy-MM-dd} is not today, and a day only holds its own tasks.");
+        var named = target.IsToday ? "today" : $"{day:yyyy-MM-dd}";
+        Output.Error($"{when:yyyy-MM-dd} is not {named}, and a day only holds its own tasks.");
         when = default;
         return false;
     }
 
     // A time typed by hand is precise to the minute, so compare by the minute: the one in
     // progress counts as now, and only a later one is the future. Anything finer would reject
-    // `start x 14:23` for the seconds it took to type it.
+    // `start x 14:23` for the seconds it took to type it. A past day never trips this.
+    var now = DateTime.Now;
     if (ToMinute(when) > ToMinute(now))
     {
         Output.Error($"{when:HH:mm} has not happened yet — it is {now:HH:mm}.");
@@ -117,15 +176,56 @@ bool TryParseWhen(string arg, out DateTime when)
 }
 
 /// <summary>
-///     A day named by <c>show</c> or <c>clear history</c>, which is a date rather than a moment
-///     and may be any day. <see cref="History.Days" /> is keyed by midnight, so a time typed
-///     alongside the date is dropped — carrying it through would silently match nothing.
+///     The moment a command falls back to when no time was typed. Only today has one: a day
+///     already past has no "now" on it, and defaulting to the real one would put the task on the
+///     wrong day — which <see cref="TryParseWhen" /> exists to prevent.
+/// </summary>
+bool TryDefaultWhen(Target target, out DateTime when)
+{
+    when = DateTime.Now;
+
+    if (target.IsToday)
+    {
+        return true;
+    }
+
+    Output.Error($"{target.Day.Date:yyyy-MM-dd} is not today and has no now, so say what time.");
+    when = default;
+    return false;
+}
+
+/// <summary>
+///     A day named by <c>show</c>, <c>clear history</c> or <c>on</c>, which is a date rather than
+///     a moment and may be any day. <see cref="History.Days" /> is keyed by midnight, so a time
+///     typed alongside the date is dropped — carrying it through would silently match nothing.
 /// </summary>
 bool TryParseDay(string arg, out DateTime day)
 {
+    var now = DateTime.Now.Date;
+
+    if (string.Equals(arg, "yesterday", StringComparison.OrdinalIgnoreCase))
+    {
+        day = now.AddDays(-1);
+        return true;
+    }
+
+    // A weekday names the most recent day it fell on, and never today: someone who types the day
+    // they are standing in means the one a week back, since today is reachable without naming it
+    // and has nothing in history to name.
+    // The letters-only guard is load-bearing — Enum.TryParse also accepts the numbers behind the
+    // names, which would quietly turn `show 3` into Wednesday.
+    if (arg.Length > 0
+        && arg.All(char.IsAsciiLetter)
+        && Enum.TryParse<DayOfWeek>(arg, ignoreCase: true, out var weekday))
+    {
+        var back = ((int)now.DayOfWeek - (int)weekday + 7) % 7;
+        day = now.AddDays(-(back is 0 ? 7 : back));
+        return true;
+    }
+
     if (!DateTime.TryParse(arg, out var parsed))
     {
-        Output.Error($"'{arg}' is not a valid date. Try 2026-08-17.");
+        Output.Error($"'{arg}' is not a date. Try 2026-08-17, yesterday, or {now.AddDays(-1):dddd}.");
         day = default;
         return false;
     }
@@ -215,16 +315,17 @@ int ListHistory()
     return 0;
 }
 
-int Clear(string[] args)
+int Clear(Target target, string[] arguments)
 {
-    switch (args)
+    switch (arguments)
     {
         case []:
             Output.Error("Specify whether to clear 'history' or 'today'.");
             return 1;
 
         case ["today" or "t", ..]:
-            today.Tasks.Clear();
+            target.Day.Tasks.Clear();
+            target.Keep();
             return 0;
 
         case ["history" or "h", .. var rest]:
@@ -246,16 +347,16 @@ int Clear(string[] args)
             return 0;
 
         default:
-            Output.Error($"'{args[0]}' is not something to clear. Specify 'history' or 'today'.");
+            Output.Error($"'{arguments[0]}' is not something to clear. Specify 'history' or 'today'.");
             return 1;
     }
 }
 
 // Feeds the shell completion script. Deliberately absent from Help: it is for
 // scripts, not people. Output is raw, one candidate per line, never themed.
-int Complete(string[] args)
+int Complete(Target target, string[] arguments)
 {
-    switch (args)
+    switch (arguments)
     {
         case ["commands", ..]:
             foreach (var (name, _, _) in commands)
@@ -266,7 +367,7 @@ int Complete(string[] args)
 
         // The tasks `today end` would accept right now: the ones still running.
         case ["end", ..]:
-            foreach (var task in today.Tasks.Where(t => t.End is null))
+            foreach (var task in target.Day.Tasks.Where(t => t.End is null))
             {
                 Console.WriteLine(task.What);
             }
@@ -275,13 +376,15 @@ int Complete(string[] args)
         // `today rm` accepts anything on the day, finished or not. A name can repeat, so
         // offer each one once.
         case ["rm", ..]:
-            foreach (var name in today.Tasks.Select(t => t.What).Distinct())
+            foreach (var name in target.Day.Tasks.Select(t => t.What).Distinct())
             {
                 Console.WriteLine(name);
             }
             return 0;
 
-        case ["show", ..]:
+        // Both take a day out of history, and neither takes today: `show` with no argument is
+        // already today, and `on` reaches the day in progress without needing to name it.
+        case ["show" or "on", ..]:
             var history = Cook.Serve<History>();
             foreach (var key in history.Days.Keys)
             {
@@ -305,9 +408,9 @@ int Complete(string[] args)
 // script is an embedded resource rather than a file beside the tool, because someone who
 // installed with `dotnet tool install` has no checkout to copy one out of. Written raw to
 // stdout like Complete -- it is meant to be redirected or eval'd, not read.
-int Completion(string[] args)
+int Completion(string[] arguments)
 {
-    var positional = args.Where(a => !IsFlag(a)).ToArray();
+    var positional = arguments.Where(a => !IsFlag(a)).ToArray();
 
     if (positional is not [var shell, ..])
     {
@@ -368,10 +471,10 @@ int NotACommand(string command)
     return 1;
 }
 
-int Start(string[] args)
+int Start(Target target, string[] arguments)
 {
-    var flags = args.Where(IsFlag).ToArray();
-    var positional = args.Where(a => !IsFlag(a)).ToArray();
+    var flags = arguments.Where(IsFlag).ToArray();
+    var positional = arguments.Where(a => !IsFlag(a)).ToArray();
 
     if (positional is [])
     {
@@ -380,45 +483,60 @@ int Start(string[] args)
     }
 
     var what = positional[0];
-    var when = DateTime.Now;
-    if (positional is [_, var time, ..] && !TryParseWhen(time, out when))
+
+    if (!TryWhen(target, positional, 1, out var when))
     {
         return 1;
     }
 
     if (flags.Contains("-c"))
     {
-        today.EndAll(when);
+        target.Day.EndAll(when);
     }
 
-    return today.Start(what, when) ? 0 : 1;
-}
-
-int End(string[] args)
-{
-    if (today.Tasks.Count is 0)
+    if (!target.Day.Start(what, when))
     {
-        Output.Error("No task started yet.");
         return 1;
     }
 
-    var positional = args.Where(a => !IsFlag(a)).ToArray();
+    target.Keep();
+    return 0;
+}
+
+int End(Target target, string[] arguments)
+{
+    if (target.Day.Tasks.Count is 0)
+    {
+        Output.Error(target.IsToday
+            ? "No task started yet."
+            : $"Nothing was logged on {target.Day.Date:yyyy-MM-dd}.");
+        return 1;
+    }
+
+    var positional = arguments.Where(a => !IsFlag(a)).ToArray();
 
     var what = positional is [var first, ..] ? first : null;
 
-    var when = DateTime.Now;
-    if (positional is [_, var time, ..] && !TryParseWhen(time, out when))
+    if (!TryWhen(target, positional, 1, out var when))
     {
         return 1;
     }
 
-    return today.End(what, when) ? 0 : 1;
+    if (!target.Day.End(what, when))
+    {
+        return 1;
+    }
+
+    target.Keep();
+    return 0;
 }
 
-// `did <what> <duration>` records something that ran for that long and ended now.
-int Did(string[] args)
+// `did <what> <duration> [when]` records something that ran for that long and ended at that time,
+// or now if none was given. The end can be said out loud because "now" is not always available --
+// on a past day there is none -- and because a run that finished earlier was never expressible.
+int Did(Target target, string[] arguments)
 {
-    var positional = args.Where(a => !IsFlag(a)).ToArray();
+    var positional = arguments.Where(a => !IsFlag(a)).ToArray();
 
     if (positional is not [var what, var length, ..])
     {
@@ -431,24 +549,41 @@ int Did(string[] args)
         return 1;
     }
 
-    var now = DateTime.Now;
-    var start = now - duration;
+    if (!TryWhen(target, positional, 2, out var end))
+    {
+        return 1;
+    }
+
+    var start = end - duration;
 
     // The other way a task can land outside the day it is logged on. It hides better than a
     // date typed by hand does, since the times reported back are only ever HH:mm.
-    if (start.Date != now.Date)
+    if (start.Date != end.Date)
     {
         Output.Error($"{length} reaches back past midnight, and a day only holds its own tasks.");
         return 1;
     }
 
-    return today.Did(what, start, now) ? 0 : 1;
+    if (!target.Day.Did(what, start, end))
+    {
+        return 1;
+    }
+
+    target.Keep();
+    return 0;
 }
 
-// `rm <what>` deletes a task from today, for the ones logged by mistake.
-int Remove(string[] args)
+// The optional time argument, wherever it sits in a command's positional list. Given, it has to
+// be a moment on the day being worked on; left out, it is now -- which only today has.
+bool TryWhen(Target target, string[] positional, int index, out DateTime when) =>
+    positional.Length > index
+        ? TryParseWhen(target, positional[index], out when)
+        : TryDefaultWhen(target, out when);
+
+// `rm <what>` deletes a task from the day, for the ones logged by mistake.
+int Remove(Target target, string[] arguments)
 {
-    var positional = args.Where(a => !IsFlag(a)).ToArray();
+    var positional = arguments.Where(a => !IsFlag(a)).ToArray();
 
     if (positional is not [var what, ..])
     {
@@ -456,25 +591,74 @@ int Remove(string[] args)
         return 1;
     }
 
-    return today.Remove(what) ? 0 : 1;
+    if (!target.Day.Remove(what))
+    {
+        return 1;
+    }
+
+    target.Keep();
+    return 0;
 }
 
-int Show(string[] args)
+/// <summary>
+///     <c>on &lt;date&gt; &lt;command&gt;</c>: runs one command against a day already filed away.
+/// </summary>
+/// <remarks>
+///     History is otherwise write-once — rollover puts days in, <c>show</c> reads them, and the
+///     only way to change one is <c>clear history</c>, which deletes the lot. That leaves the day
+///     you forgot to close with no repair short of editing the jar by hand.
+///     A day that turns out to be today is sent to the day in progress rather than looked up:
+///     today is not in <see cref="History" /> yet, so a lookup would report no such day.
+/// </remarks>
+int On(Target current, string[] arguments)
 {
-    var day = today;
-    var isToday = true;
+    if (arguments is not [var wanted, var command, .. var rest])
+    {
+        Output.Error("Say which day and what to do, as in: today on yesterday end coding 17:00");
+        return 1;
+    }
 
-    if (args is [var wanted, ..])
+    if (!TryParseDay(wanted, out var date))
+    {
+        return 1;
+    }
+
+    if (!amendable.Contains(command))
+    {
+        Output.Error($"'{command}' cannot be run against another day. Try: {string.Join(", ", amendable)}");
+        return 1;
+    }
+
+    if (date == DateTime.Now.Date)
+    {
+        return Dispatch(current, [command, .. rest]);
+    }
+
+    if (!Cook.Serve<History>().Days.TryGetValue(date, out var day))
+    {
+        Output.Error($"No history for {date:yyyy-MM-dd}.");
+        return 1;
+    }
+
+    return Dispatch(Target.Past(day), [command, .. rest]);
+}
+
+int Show(Target target, string[] arguments)
+{
+    if (arguments is [var wanted, ..])
     {
         if (!TryParseDay(wanted, out var date))
         {
             return 1;
         }
 
-        if (Cook.Serve<History>().Days.TryGetValue(date, out var historicalDay))
+        if (date == DateTime.Now.Date)
         {
-            day = historicalDay;
-            isToday = false;
+            target = Target.Current(target.Day);
+        }
+        else if (Cook.Serve<History>().Days.TryGetValue(date, out var historicalDay))
+        {
+            target = Target.Past(historicalDay);
         }
         else
         {
@@ -483,26 +667,28 @@ int Show(string[] args)
         }
     }
 
+    var day = target.Day;
+
     if (day.Tasks.Count is 0)
     {
         Output.Error("Nothing was done this day...");
         return 1;
     }
 
-    Output.Header(isToday ? $"Today {day.Date:dd MMM}" : $"{day.Date:dd MMM yyyy}");
+    Output.Header(target.IsToday ? $"Today {day.Date:dd MMM}" : $"{day.Date:dd MMM yyyy}");
     Output.Blank();
     // A day out of history has no "now" to draw an unfinished task up to.
-    Output.Chart(day.Tasks, isToday ? DateTime.Now : day.Tasks.Max(t => t.End ?? t.Start));
+    Output.Chart(day.Tasks, target.IsToday ? DateTime.Now : day.Tasks.Max(t => t.End ?? t.Start));
     Output.Blank();
     return 0;
 }
 
-int ThemeCommand(string[] args)
+int ThemeCommand(string[] arguments)
 {
     var theme = Cook.Serve<Theme>();
 
-    var flags = args.Where(IsFlag).ToArray();
-    var positional = args.Where(a => !IsFlag(a)).ToArray();
+    var flags = arguments.Where(IsFlag).ToArray();
+    var positional = arguments.Where(a => !IsFlag(a)).ToArray();
 
     switch (positional)
     {
