@@ -10,37 +10,45 @@ because the thing the user runs is the shim in `~/.dotnet/tools`, not `bin/Debug
 
 ## Protect the user's day first
 
-**The user's real tracked time lives beside the shim** — `Environment.ProcessPath` is what
-`Taste` derives its directory from:
+**The user's real tracked time lives in the OS data directory** — `Storage` decides, not
+`Taste`'s default:
 
 ```
-~/.dotnet/tools/today.today.today.json      # today, the one that matters
-~/.dotnet/tools/today.today.history.json    # past days
-~/.dotnet/tools/today.today.theme.json      # only exists once `theme set` has run
+~/.local/share/today/today.today.today.json      # today, the one that matters
+~/.local/share/today/today.today.history.json    # past days
+~/.config/today/today.today.theme.json           # only exists once `theme set` has run
 ```
 
-**Files under the pre-2.0 names may also be there** — `today.today.json`, `today.history.json`,
-`today.theme.json`. Taste 2.0 names a jar by the taste's *full* type name, so those gained a
-segment, and nothing migrates them: they are no longer read, but until something renames them
-they are the only copy of everything tracked before the 2.0 release. Guard both name shapes.
-
-Losing or polluting any of these loses real records the user cannot reconstruct. Before running
-the **installed** `today` for any reason — smoke test, demo, screenshot — checkpoint them:
+**`dotnet run` is no longer a sandbox.** Before 2.0 it kept its own state in
+`bin/Debug/net10.0/`; now it reads and writes the same files the installed tool does. Point it
+somewhere disposable instead — this is the guard, and it works for both binaries:
 
 ```bash
-for f in ~/.dotnet/tools/today.*.json; do
-  cp "$f" "$CLAUDE_JOB_DIR/tmp/$(basename "$f").bak"
+export TODAY_DATA_DIR="$CLAUDE_JOB_DIR/tmp/today-data"
+export TODAY_CONFIG_DIR="$CLAUDE_JOB_DIR/tmp/today-config"
+```
+
+Set both. Setting one leaves the other pointing at the user's real directory.
+
+For the rare case that has to run **unsandboxed** — confirming the installed tool reads the
+user's own day, say — checkpoint first:
+
+```bash
+for f in ~/.local/share/today/*.json ~/.config/today/*.json ~/.dotnet/tools/today.*.json; do
+  [ -e "$f" ] && cp "$f" "$CLAUDE_JOB_DIR/tmp/$(basename "$f").bak"
 done
-md5sum ~/.dotnet/tools/today.*.json
+md5sum ~/.local/share/today/*.json ~/.config/today/*.json 2>/dev/null
 ```
 
 Restore afterwards and prove it with a second `md5sum` that matches, line for line. Every
 command in `Program.cs` runs `today.Savor()` in a `finally`, so **even `today complete rm`
-rewrites the state file** — there is no read-only invocation. A checkpoint that finds no files
-at all means the glob is wrong, not that there is nothing to protect: stop and look.
+rewrites the state file** — there is no read-only invocation.
 
-Prefer not to need the guard at all: exercise changes with `dotnet run -- <args>`, which keeps
-its own state in `bin/Debug/net10.0/` and cannot touch the user's.
+**Pre-2.0 files may still sit beside the shim** — `~/.dotnet/tools/today.{today,history,theme}.json`.
+There is no migration code: the move into the OS directories was done by hand, once. Nothing
+reads those files any more, so they are harmless where they are — but they are also the only
+copy of anything that was not carried across, which is why the glob above still covers them.
+Do not delete them on the user's behalf.
 
 ## Steps
 
@@ -51,10 +59,32 @@ its own state in `bin/Debug/net10.0/` and cannot touch the user's.
 3. **Bump `<Version>`** in `Today.csproj`. Minor bump for a new command or visible behaviour,
    patch for a fix.
 4. **`dotnet build`** — `TreatWarningsAsErrors` is on, so any nullable warning is a failure.
+
+   Inside a sandboxed session the build fails on `Error reading git repository information:
+   Access to the path '.gitmodules' is denied`. The sandbox masks `.gitmodules` with an
+   unreadable `/dev/null` bind-mount, and SourceLink's git task cannot tell that apart from a
+   real file. Build with `EnableSourceControlManagerQueries=false` in the environment — MSBuild
+   reads env vars as properties, so this needs no change to the csproj.
 5. **Commit.** Explain why the behaviour is what it is, not just what moved.
 6. **`dotnet pack -c Release`** → `./nupkg/Today.<version>.nupkg`. The readme warning is
    expected and harmless.
-7. **Reinstall**, with the checkpoint from above already taken:
+
+   **Ask the user to run this one from their own terminal.** The workaround from step 4 is not
+   safe here: with the git query off, `pack` silently omits the `<repository commit="…"/>`
+   element from the nuspec, so the published package loses its link back to the source commit.
+   The csproj declares no `RepositoryUrl`, so that element comes from the git query and nothing
+   else. Compare `1.11.0` (packed outside a sandbox, has it) against `2.0.0` (packed inside one,
+   does not) if you need to see the difference. Verify what you shipped:
+
+   ```bash
+   unzip -p ./nupkg/Today.<version>.nupkg Today.nuspec | grep -i repository
+   ```
+
+   No output means the commit stamp is missing and the package should be repacked outside the
+   sandbox.
+7. **Reinstall**, with the checkpoint from above already taken. Afterwards check that
+   `today show` still has the user's day — the shim is replaced, but the state it reads lives
+   in the OS directories and should be untouched by the reinstall:
 
    ```bash
    dotnet tool uninstall --global Today

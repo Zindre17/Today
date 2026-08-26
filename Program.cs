@@ -3,6 +3,9 @@ using Taste;
 using Taste.Savoring;
 using Today;
 
+// Settles where state is kept. Has to come first: the kitchen cannot be changed once a taste is served.
+Storage.Arrange();
+
 var today = Cook.Serve<Today.Today>();
 
 // Every command, described once. `complete commands` takes the names, `help` prints the table

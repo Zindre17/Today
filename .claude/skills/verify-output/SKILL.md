@@ -41,7 +41,7 @@ logic. Use the harness in this directory, which forks a pty, runs `bash -i` with
 script sourced, sends actual TAB bytes, and presses Ctrl-C so the completed line never executes:
 
 ```bash
-# against the dev build (default) -- cannot touch the user's state
+# against the dev build (default) -- still the user's state unless the overrides below are set
 python3 .claude/skills/verify-output/tab-test.py 'today rm \t\t' 'today rm st\t'
 
 # against the installed tool -- checkpoints and restores the user's JSON automatically
@@ -53,7 +53,8 @@ python3 .claude/skills/verify-output/tab-test.py --installed 'today end \t\t'
 What to actually check:
 
 - **The candidate set matches the command.** `end` offers only running tasks, `rm` offers every
-  distinct name on the day. They come from different `Complete` cases and can drift apart.
+  distinct name on the day, `show` offers the days in history and never today's own date. They
+  come from different `Complete` cases and can drift apart.
 - **Names with spaces survive.** `reviewing the PR` must come back as `reviewing\ the\ PR`. This
   is the `printf %q` re-escaping, and it is the part most likely to break.
 - **Prefixes work**, including a prefix of a multi-word name (`rev<TAB>`).
@@ -67,7 +68,15 @@ only if you built first — the harness runs `dotnet build` for you unless `--in
 
 ## The standing rule
 
-Never exercise the **installed** `today` without checkpointing `~/.dotnet/tools/today.*.json`
-first. Every command Savors state in a `finally`, so even `complete` writes the file. Prefer
-`dotnet run`, which keeps its state in `bin/Debug/net10.0/`. See the `release` skill for the
-checkpoint procedure.
+Never exercise `today` — installed **or** via `dotnet run` — against the user's real state.
+Since 2.0 both read the same files (`~/.local/share/today/`, `~/.config/today/`); `dotnet run`
+stopped being a sandbox when state left `bin/Debug/net10.0/`. Export both overrides first:
+
+```bash
+export TODAY_DATA_DIR="$CLAUDE_JOB_DIR/tmp/today-data"
+export TODAY_CONFIG_DIR="$CLAUDE_JOB_DIR/tmp/today-config"
+```
+
+Setting only one leaves the other pointing at the real directory. Every command Savors state
+in a `finally`, so even `complete` writes a file. See the `release` skill for the checkpoint
+procedure if something genuinely has to run unsandboxed.
