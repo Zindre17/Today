@@ -14,9 +14,11 @@ Usage:
 
 `\\t` in an argument is a TAB. Two list all candidates, one completes.
 
-By default `today` is shimmed to `dotnet run` against the repo, so the user's real
-tracked day cannot be touched. With --installed the real global tool is used and its
-JSON state is checkpointed and restored around the run -- every `today` command
+By default `today` is shimmed to `dotnet run` against the repo, with TODAY_DATA_DIR and
+TODAY_CONFIG_DIR pointed at a throwaway directory so the user's real tracked day cannot
+be touched. Those overrides are the isolation: since 2.0 the state a dev build reads is
+the same state the installed tool reads. With --installed the real global tool is used
+and its JSON state is checkpointed and restored around the run -- every `today` command
 Savors state in a `finally`, so even `complete` rewrites the file.
 """
 
@@ -31,10 +33,26 @@ import time
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 COMPLETIONS = os.path.join(REPO, "completions", "today.bash")
-STATE = [
-    os.path.expanduser(f"~/.dotnet/tools/today.{n}.json")
-    for n in ("today", "history", "theme")
-]
+def state_files():
+    """The jars the installed tool actually reads, worked out the way Storage does.
+
+    These moved in 2.0 -- out of ~/.dotnet/tools, into the OS data and config
+    directories, under names that each gained a segment. The overrides and the XDG
+    variables are honoured because .NET's GetFolderPath honours them: a checkpoint
+    aimed at a directory the tool is not using is worse than no checkpoint, because
+    it matches nothing and then reports success.
+    """
+    data = os.environ.get("TODAY_DATA_DIR") or os.path.join(
+        os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "today"
+    )
+    config = os.environ.get("TODAY_CONFIG_DIR") or os.path.join(
+        os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"), "today"
+    )
+    return [
+        os.path.join(data, "today.today.today.json"),
+        os.path.join(data, "today.today.history.json"),
+        os.path.join(config, "today.today.theme.json"),
+    ]
 
 # Long enough for bash to start and for `dotnet run` to answer a completion query.
 STARTUP = 2.5
@@ -52,6 +70,13 @@ def make_rcfile(directory, installed):
         f.write(shim)
         if installed:
             f.write('export PATH="$HOME/.dotnet/tools:$PATH"\n')
+        else:
+            # `dotnet run` stopped being isolated in 2.0, when state moved out of
+            # bin/Debug and into the OS directories. Point it somewhere disposable, or
+            # every TAB pressed here Savors over the user's real day.
+            scratch = os.path.join(directory, "state")
+            f.write(f'export TODAY_DATA_DIR="{scratch}/data"\n')
+            f.write(f'export TODAY_CONFIG_DIR="{scratch}/config"\n')
         f.write(f"source {COMPLETIONS}\n")
         f.write("PS1='$ '\n")
     return path
@@ -122,10 +147,26 @@ def main(argv):
     saved = {}
     try:
         if installed:
-            for path in STATE:
+            jars = state_files()
+            for path in jars:
                 if os.path.exists(path):
                     saved[path] = os.path.join(workdir, os.path.basename(path))
                     shutil.copy2(path, saved[path])
+
+            # Nothing found means either a genuinely fresh install or -- far more
+            # likely, and the reason this check exists -- that these paths have drifted
+            # from where the tool keeps state. Refusing is the safe reading: the run
+            # would otherwise proceed unguarded having just printed reassurance.
+            if not saved:
+                print("Found none of the state files to checkpoint:")
+                for path in jars:
+                    print(f"  {path}")
+                print(
+                    "\nEither the install is fresh, or these paths no longer match "
+                    "Storage. Refusing to run the installed tool unguarded."
+                )
+                return 1
+
             print(f"checkpointed {len(saved)} state file(s)\n")
 
         rcfile = make_rcfile(workdir, installed)
