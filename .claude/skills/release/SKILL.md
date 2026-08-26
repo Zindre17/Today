@@ -117,15 +117,23 @@ Do not delete them on the user's behalf.
    Uninstall leaves the JSON beside the shim alone — confirm with `md5sum` rather than
    assuming it.
 8. **Check how the user set completion up, if the script changed.** It is an embedded resource
-   now, so the reinstall in step 7 already carries the new version — but only for the `eval
-   "$(today completion bash)"` form, which re-reads it at every shell start. Someone who wrote
-   it out to a file instead still has the old copy:
+   now, so the reinstall in step 7 already carries the new version — but that only reaches the
+   `eval "$(today completion bash)"` form, which re-reads it at every shell start. Look before
+   assuming which form is in use:
+
+   ```bash
+   ls -l ~/.local/share/bash-completion/completions/today
+   ```
+
+   A **symlink into the repo** (`-> ~/code/Today/completions/today.bash`, which is how this
+   machine is set up) tracks the checkout on its own and needs nothing. A **real file** is a
+   copy that has now gone stale and needs rewriting:
 
    ```bash
    today completion bash > ~/.local/share/bash-completion/completions/today
    ```
 
-   Either way a new shell is needed to pick it up.
+   In every form a new shell is needed to pick it up.
 9. **Delete the superseded nupkg** so `--add-source ./nupkg` cannot resolve a stale version.
 10. **Report** the version, the commit, and how far `main` is ahead of `origin/main`.
 
