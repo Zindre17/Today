@@ -169,8 +169,8 @@ mind later: the old files are only ignored, never deleted.
 ## Shell completion
 
 Bash completion asks the binary what to offer, so it always matches what the command accepts —
-`today end <TAB>` gives the tasks running right now, `today rm <TAB>` everything on the day, and
-`today show <TAB>` the days in history.
+`today end <TAB>` gives the tasks running right now, `today did <TAB>` the ones already finished,
+`today rm <TAB>` everything on the day, and `today show <TAB>` the days in history.
 
 The script ships inside the tool, so there is nothing to fetch. Add one line to `~/.bashrc`:
 

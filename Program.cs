@@ -379,6 +379,17 @@ int Complete(Target target, string[] arguments)
             }
             return 0;
 
+        // `today did` logs work that is over, and the likeliest thing you are logging is more
+        // of something already finished today -- a task picked up again is the same task, and
+        // the chart groups it onto one row. Running ones are left out: `did` would accept the
+        // name, but what you want for those is `end`.
+        case ["did", ..]:
+            foreach (var name in target.Day.Tasks.Where(t => t.End is not null).Select(t => t.What).Distinct())
+            {
+                Console.WriteLine(name);
+            }
+            return 0;
+
         // `today rm` accepts anything on the day, finished or not. A name can repeat, so
         // offer each one once.
         case ["rm", ..]:
