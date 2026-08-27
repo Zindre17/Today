@@ -174,7 +174,9 @@ mind later: the old files are only ignored, never deleted.
 
 Bash completion asks the binary what to offer, so it always matches what the command accepts —
 `today end <TAB>` gives the tasks running right now, `today did <TAB>` the ones already finished,
-`today rm <TAB>` everything on the day, and `today show <TAB>` the days in history.
+`today rm <TAB>` everything on the day, and `today show <TAB>` or `today on <TAB>` the days in
+history — as dates, and as the words that reach them, so `yesterday` and `friday` complete when
+there is a day behind them.
 
 The script ships inside the tool, so there is nothing to fetch. Add one line to `~/.bashrc`:
 

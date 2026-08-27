@@ -30,6 +30,11 @@ Storage.Arrange();
 // resource called `completion.<shell>`.
 string[] shells = ["bash"];
 
+// The words `TryParseDay` takes besides a date. `complete show`/`complete on` offer the ones
+// that land on a day there is history for, so tabbing never completes to something the command
+// will then refuse.
+string[] dayWords = ["yesterday", .. Enum.GetNames<DayOfWeek>().Select(d => d.ToLowerInvariant())];
+
 // What `on` will run against a past day. The rest are left out for want of a meaning rather than
 // out of caution: `list` and `theme` are not about a day at all, `clear` and `completion` already
 // say which day or shell they act on, and `help`/`version` would only be answering the same thing
@@ -406,6 +411,17 @@ int Complete(Target target, string[] arguments)
             foreach (var key in history.Days.Keys)
             {
                 Console.WriteLine($"{key:yyyy-MM-dd}");
+            }
+
+            // A date is not how anyone reaches for a day they worked on yesterday, so the words
+            // are offered too -- but only where they land on a day there is something to show.
+            // `monday` with no Monday behind it would complete to an error.
+            foreach (var word in dayWords)
+            {
+                if (TryParseDay(word, out var named) && history.Days.ContainsKey(named))
+                {
+                    Console.WriteLine(word);
+                }
             }
             return 0;
 
