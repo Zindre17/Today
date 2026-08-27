@@ -209,6 +209,14 @@ Bash completion asks the binary what to offer, so it always matches what the com
 history — as dates, and as the words that reach them, so `yesterday` and `friday` complete when
 there is a day behind them.
 
+`on` completes all the way down, against the day you named:
+
+```bash
+today on monday <TAB>          # start, end, did, rm, show
+today on monday rm <TAB>       # what you logged on Monday
+today on monday end <TAB>      # what you left running on Monday
+```
+
 The script ships inside the tool, so there is nothing to fetch. Add one line to `~/.bashrc`:
 
 ```bash

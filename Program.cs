@@ -427,8 +427,33 @@ int Clear(Target target, string[] arguments)
 
 // Feeds the shell completion script. Deliberately absent from Help: it is for
 // scripts, not people. Output is raw, one candidate per line, never themed.
+//
+// `complete <command> [argument-index] [day]`. The day arrives when the shell is completing
+// inside `on <date> ...`, and moves every candidate below onto that day -- `today on monday rm
+// <TAB>` has to offer Monday's tasks, not today's.
 int Complete(Target target, string[] arguments)
 {
+    if (arguments is [_, _, var named, ..])
+    {
+        // Anything that is not a day the tool holds has nothing behind it to offer. Completion
+        // says so by saying nothing: a half-typed date is a normal thing to be looking at, not
+        // an error to report into the middle of someone's command line.
+        if (!TryParseDay(named, out var date, complain: false))
+        {
+            return 0;
+        }
+
+        if (date != DateOnly.FromDateTime(DateTime.Now))
+        {
+            if (!Cook.Serve<History>().Days.TryGetValue(date, out var past))
+            {
+                return 0;
+            }
+
+            target = Target.Past(past);
+        }
+    }
+
     switch (arguments)
     {
         case ["commands", ..]:
@@ -461,6 +486,16 @@ int Complete(Target target, string[] arguments)
         // offer each one once.
         case ["rm", ..]:
             foreach (var name in target.Day.Tasks.Select(t => t.What).Distinct())
+            {
+                Console.WriteLine(name);
+            }
+            return 0;
+
+        // `on <date> <command>`: what can follow the date. Not the whole command list -- `on`
+        // forwards only what `amendable` holds, and offering `list` here would complete to a
+        // command that then refuses.
+        case ["on", "1", ..]:
+            foreach (var name in amendable)
             {
                 Console.WriteLine(name);
             }
