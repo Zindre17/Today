@@ -54,6 +54,8 @@ today on yesterday end writing 17:00   # fix a day you already filed away
 today show                     # the chart above
 today show --no-chart          # just the names and times
 today show yesterday           # a day out of history
+today summary week             # the last seven days, by task
+today summary monday friday    # or any range of them
 today list                     # which days are kept
 ```
 
@@ -65,6 +67,7 @@ today list                     # which days are kept
 | `rm` | `<what>` | Delete a task logged by mistake. |
 | `on` | `<date> <command>` | Run one of the above against a past day. |
 | `show` | `[date] [--no-chart]` | Draw the day as a Gantt chart, or `--no-chart` for just the times. |
+| `summary` | `<span> \| <from> <to>` | What several days came to, by task. |
 | `list` | | The days kept in history. |
 | `clear` | `today \| history [date]` | Forget today, or a day of history. |
 | `theme` | `[show \| set \| reset]` | Color the output. |
@@ -107,6 +110,34 @@ today on yesterday show
 
 Because a past day has no "now", the time is not optional there — `today on yesterday start x`
 asks you for one rather than guessing.
+
+## Adding days up
+
+`show` answers one day at a time. `summary` answers several:
+
+```
+$ today summary week
+
+21 Aug to 27 Aug 2026 — 5 days
+
+    writing                9h15m
+    code review            4h45m
+    standup                  50m
+    total                 14h50m
+```
+
+One row per task rather than per day, longest first, because the question a summary answers is
+where the time went. Give it a span — `week`, `month`, `year`, or a count like `3d` or `2w` — and
+it covers that many days ending today. Give it two dates and it covers exactly those:
+
+```bash
+today summary 3d                     # today and the two days before it
+today summary monday friday          # a range, by name or by date
+today summary yesterday              # or a single day
+```
+
+Spans are rolling, not calendar: `week` is today and the six days before it, so asking on a
+Monday morning gives you a week's work rather than a morning's.
 
 ## Where your day is kept
 

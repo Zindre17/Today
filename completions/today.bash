@@ -23,16 +23,26 @@ _today() {
         return
     fi
 
-    [[ $cmd == end || $cmd == rm || $cmd == did || $cmd == show || $cmd == completion || $cmd == on ]] || return
+    case $cmd in
+    end | did | rm | on | show | summary | completion) ;;
+    *) return ;;
+    esac
 
-    # `end <what> [when]` and `rm <what>` -- only the first argument is a task name.
+    # Only the first argument is completable -- in `end <what> [when]` the second is a time, not
+    # another task name. `summary <from> <to>` is the exception: a day goes in either position.
     argc=0
     for ((i = 2; i < COMP_CWORD; i++)); do
         [[ ${COMP_WORDS[i]} == -* ]] || ((argc++))
     done
-    ((argc == 0)) || return
+    if [[ $cmd == summary ]]; then
+        ((argc <= 1)) || return
+    else
+        ((argc == 0)) || return
+    fi
 
-    names=$(today complete "$cmd" 2>/dev/null) || return
+    # $argc goes along so `complete` can tell which argument is being completed: `summary`
+    # offers its span words in the first position only.
+    names=$(today complete "$cmd" "$argc" 2>/dev/null) || return
     [[ -n $names ]] || return
 
     # Task names contain spaces, so the word readline hands us may be quoted or

@@ -17,6 +17,7 @@ Storage.Arrange();
     ("rm", "<what>", "Delete a task logged by mistake."),
     ("on", "<date> <command>", "Run one of the above against a past day."),
     ("show", "[date] [--no-chart]", "Draw the day as a Gantt chart."),
+    ("summary", "<span> | <from> <to>", "What several days came to, by task."),
     ("list", "", "The days kept in history."),
     ("clear", "today | history [date]", "Forget today, or a day of history."),
     ("theme", "[show | set | reset]", "Color the output."),
@@ -34,6 +35,11 @@ string[] shells = ["bash"];
 // that land on a day there is history for, so tabbing never completes to something the command
 // will then refuse.
 string[] dayWords = ["yesterday", .. Enum.GetNames<DayOfWeek>().Select(d => d.ToLowerInvariant())];
+
+// The spans `summary` names in words, and what each comes to in days. One table, so the command
+// and `complete summary` cannot disagree about what is accepted -- the same reason `shells` and
+// `commands` are each written down once.
+(string Name, int Days)[] spans = [("week", 7), ("month", 30), ("year", 365)];
 
 // What `on` will run against a past day. The rest are left out for want of a meaning rather than
 // out of caution: `list` and `theme` are not about a day at all, `clear` and `completion` already
@@ -55,6 +61,7 @@ int Dispatch(Target target, string[] arguments) => arguments switch
     ["rm", .. var rest] => Remove(target, rest),
     ["on", .. var rest] => On(target, rest),
     ["show", .. var rest] => Show(target, rest),
+    ["summary", .. var rest] => Summary(target, rest),
     ["clear", .. var rest] => Clear(target, rest),
     ["list", ..] => ListHistory(),
     ["theme", .. var rest] => ThemeCommand(rest),
@@ -210,7 +217,7 @@ bool TryDefaultWhen(Target target, out TimeOnly when)
 ///     a moment and may be any day. <see cref="History.Days" /> is keyed by midnight, so a time
 ///     typed alongside the date is dropped — carrying it through would silently match nothing.
 /// </summary>
-bool TryParseDay(string arg, out DateOnly day)
+bool TryParseDay(string arg, out DateOnly day, bool complain = true)
 {
     var now = DateOnly.FromDateTime(DateTime.Now);
 
@@ -236,12 +243,67 @@ bool TryParseDay(string arg, out DateOnly day)
 
     if (!DateTime.TryParse(arg, out var parsed))
     {
-        Output.Error($"'{arg}' is not a date. Try 2026-08-17, yesterday, or {now.AddDays(-1):dddd}.");
+        if (complain)
+        {
+            Output.Error($"'{arg}' is not a date. Try 2026-08-17, yesterday, or {now.AddDays(-1):dddd}.");
+        }
         day = default;
         return false;
     }
 
     day = DateOnly.FromDateTime(parsed);
+    return true;
+}
+
+/// <summary>
+///     A span of days for <c>summary</c>: a word from <c>spans</c>, or a count and a unit —
+///     <c>3d</c>, <c>2w</c>. Quiet on failure, because the caller tries a day next and one
+///     complaint naming both forms is more use than two naming one each.
+/// </summary>
+/// <remarks>
+///     Rolling and inclusive of today, so <c>week</c> is today and the six days before it. A
+///     calendar week would need a convention about which day starts one, and on a Monday morning
+///     would answer with a few hours rather than with the week someone asking clearly meant.
+/// </remarks>
+bool TryParseSpan(string arg, out int days)
+{
+    days = 0;
+
+    foreach (var (name, length) in spans)
+    {
+        if (string.Equals(arg, name, StringComparison.OrdinalIgnoreCase))
+        {
+            days = length;
+            return true;
+        }
+    }
+
+    var digits = 0;
+    while (digits < arg.Length && char.IsAsciiDigit(arg[digits]))
+    {
+        digits++;
+    }
+
+    if (digits is 0 || !int.TryParse(arg[..digits], out var count) || count < 1)
+    {
+        return false;
+    }
+
+    var per = arg[digits..].ToLowerInvariant() switch
+    {
+        "d" or "day" or "days" => 1,
+        "w" or "week" or "weeks" => 7,
+        _ => 0,
+    };
+
+    // Ten years is past the point where there is anything to find, and stops the multiplication
+    // below from being worth worrying about.
+    if (per is 0 || (long)count * per > 3660)
+    {
+        return false;
+    }
+
+    days = count * per;
     return true;
 }
 
@@ -404,25 +466,24 @@ int Complete(Target target, string[] arguments)
             }
             return 0;
 
-        // Both take a day out of history, and neither takes today: `show` with no argument is
-        // already today, and `on` reaches the day in progress without needing to name it.
+        // Neither takes today: `show` with no argument is already today, and `on` reaches the
+        // day in progress without needing to name it.
         case ["show" or "on", ..]:
-            var history = Cook.Serve<History>();
-            foreach (var key in history.Days.Keys)
-            {
-                Console.WriteLine($"{key:yyyy-MM-dd}");
-            }
+            Days();
+            return 0;
 
-            // A date is not how anyone reaches for a day they worked on yesterday, so the words
-            // are offered too -- but only where they land on a day there is something to show.
-            // `monday` with no Monday behind it would complete to an error.
-            foreach (var word in dayWords)
+        // `summary` takes a span or a day. The script passes which argument is being completed,
+        // because the span words belong to the first one only -- `summary <from> <to>` wants a
+        // day in both, and offering `week` where only a date will do completes to an error.
+        case ["summary", .. var at]:
+            if (at is not ["1", ..])
             {
-                if (TryParseDay(word, out var named) && history.Days.ContainsKey(named))
+                foreach (var (name, _) in spans)
                 {
-                    Console.WriteLine(word);
+                    Console.WriteLine(name);
                 }
             }
+            Days();
             return 0;
 
         case ["completion", ..]:
@@ -434,6 +495,28 @@ int Complete(Target target, string[] arguments)
 
         default:
             return 1;
+    }
+
+    // The days there is history for, as dates and as the words that reach them. A date is not
+    // how anyone reaches for the day they worked on yesterday -- but a word is only offered
+    // where it lands on a day there is something to show, since `monday` with no Monday behind
+    // it would complete to an error.
+    void Days()
+    {
+        var history = Cook.Serve<History>();
+
+        foreach (var key in history.Days.Keys)
+        {
+            Console.WriteLine($"{key:yyyy-MM-dd}");
+        }
+
+        foreach (var word in dayWords)
+        {
+            if (TryParseDay(word, out var named) && history.Days.ContainsKey(named))
+            {
+                Console.WriteLine(word);
+            }
+        }
     }
 }
 
@@ -728,6 +811,124 @@ int Show(Target target, string[] arguments)
     {
         Output.Chart(day.Tasks, reference);
     }
+
+    Output.Blank();
+    return 0;
+}
+
+/// <summary>
+///     <c>summary &lt;span&gt;</c>, <c>summary &lt;day&gt;</c> or <c>summary &lt;from&gt; &lt;to&gt;</c>:
+///     what a stretch of days came to, one row per task rather than one row per day.
+/// </summary>
+/// <remarks>
+///     <c>show</c> answers a day at a time and <c>list</c> only says which days there are, so
+///     "how much of last week went on this" had no way of being asked. Days are read out of
+///     <see cref="History" />, plus the day in progress when the range reaches it — today is
+///     never in <c>History</c>, so it has to be added rather than found.
+/// </remarks>
+int Summary(Target target, string[] arguments)
+{
+    var positional = arguments.Where(a => !IsFlag(a)).ToArray();
+    var now = DateOnly.FromDateTime(DateTime.Now);
+    DateOnly from, to;
+
+    switch (positional)
+    {
+        case [var only]:
+            if (TryParseSpan(only, out var span))
+            {
+                // Inclusive of today, so `3d` is today and the two days before it.
+                to = now;
+                from = now.AddDays(-(span - 1));
+            }
+            else if (TryParseDay(only, out var single, complain: false))
+            {
+                from = to = single;
+            }
+            else
+            {
+                Output.Error($"'{only}' is not a span or a day. Try {spans[0].Name}, 3d, 2w, {dayWords[0]}, or a date.");
+                return 1;
+            }
+            break;
+
+        case [var start, var end, ..]:
+            if (!TryParseDay(start, out from) || !TryParseDay(end, out to))
+            {
+                return 1;
+            }
+            if (from > to)
+            {
+                // Swapping them would hide a typo behind an answer that looked fine.
+                Output.Error($"{from:yyyy-MM-dd} is after {to:yyyy-MM-dd}.");
+                return 1;
+            }
+            break;
+
+        default:
+            Output.Error("Say what to sum up, as in: today summary week, or today summary monday friday");
+            return 1;
+    }
+
+    var days = Cook.Serve<History>().Days
+        .Where(entry => entry.Key >= from && entry.Key <= to)
+        .Select(entry => (Day: entry.Value, IsToday: false))
+        .ToList();
+
+    if (target.Day.Date >= from && target.Day.Date <= to)
+    {
+        days.Add((target.Day, true));
+    }
+
+    var totals = new Dictionary<string, TimeSpan>();
+    var unfinished = new HashSet<string>();
+    var counted = 0;
+
+    foreach (var (day, isToday) in days)
+    {
+        if (day.Tasks.Count is 0)
+        {
+            continue;
+        }
+
+        counted++;
+
+        // The same rule `show` draws by: now for the day in progress, and the last thing that
+        // happened for a day out of history, which has no now of its own.
+        var reference = isToday
+            ? TimeOnly.FromDateTime(DateTime.Now)
+            : day.Tasks.Max(t => t.End ?? t.Start);
+
+        foreach (var task in day.Tasks.GroupBy(t => t.What))
+        {
+            totals[task.Key] = totals.GetValueOrDefault(task.Key) + Output.Took(task, reference);
+
+            if (task.Any(t => t.End is null))
+            {
+                unfinished.Add(task.Key);
+            }
+        }
+    }
+
+    if (counted is 0)
+    {
+        Output.Error(from == to
+            ? $"Nothing was done on {from:yyyy-MM-dd}."
+            : $"Nothing was done between {from:yyyy-MM-dd} and {to:yyyy-MM-dd}.");
+        return 1;
+    }
+
+    Output.Blank();
+    Output.Header(from == to
+        ? $"{from:dd MMM yyyy}"
+        : $"{from:dd MMM} to {to:dd MMM yyyy} — {counted} {(counted is 1 ? "day" : "days")}");
+    Output.Blank();
+
+    // Longest first. A summary is asked in order to find out where the time went, and the
+    // chart's start order carries no meaning once the days are stacked on top of each other.
+    Output.Summary(totals
+        .OrderByDescending(entry => entry.Value)
+        .Select(entry => (entry.Key, entry.Value, unfinished.Contains(entry.Key))));
 
     Output.Blank();
     return 0;
