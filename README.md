@@ -21,6 +21,9 @@ Solid bars are finished, shaded ones are still running. A name logged more than 
 row with its stretches drawn on it and its time summed, because picking work back up is the
 same work.
 
+`today show --no-chart` drops the bars and the axis and keeps the names, the times and the
+total — the same numbers, for when the question is how long rather than when.
+
 ## Install
 
 `today` is a .NET global tool and needs the .NET 10 SDK. Build and install it from source:
@@ -49,6 +52,7 @@ today did lunch 1h 12:30       # or one that ended earlier
 today rm standup               # remove one logged by mistake
 today on yesterday end writing 17:00   # fix a day you already filed away
 today show                     # the chart above
+today show --no-chart          # just the names and times
 today show yesterday           # a day out of history
 today list                     # which days are kept
 ```
@@ -60,7 +64,7 @@ today list                     # which days are kept
 | `did` | `<what> <duration> [when]` | Log one already over: `15m`, `1h30m`. |
 | `rm` | `<what>` | Delete a task logged by mistake. |
 | `on` | `<date> <command>` | Run one of the above against a past day. |
-| `show` | `[date]` | Draw the day as a Gantt chart. |
+| `show` | `[date] [--no-chart]` | Draw the day as a Gantt chart, or `--no-chart` for just the times. |
 | `list` | | The days kept in history. |
 | `clear` | `today \| history [date]` | Forget today, or a day of history. |
 | `theme` | `[show \| set \| reset]` | Color the output. |

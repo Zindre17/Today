@@ -112,7 +112,7 @@ public static class Output
         foreach (var task in tasks.GroupBy(t => t.What))
         {
             var running = task.Any(t => t.End is null);
-            var took = TimeSpan.Zero;
+            var took = Took(task, reference);
 
             var bar = new char[width];
             Array.Fill(bar, ' ');
@@ -120,7 +120,6 @@ public static class Output
             foreach (var stretch in task)
             {
                 var finish = Finish(stretch, reference);
-                took += finish - stretch.Start.ToTimeSpan();
 
                 // A stretch shorter than one column still deserves to be visible, including one
                 // that starts on the closing edge of the window.
@@ -143,10 +142,41 @@ public static class Output
             Console.WriteLine($"    {name}  {Time(theme.Duration, took)}  {Bar(theme, bar)}");
         }
 
-        // The total sits in the same column as the times above it, so it reads as their sum.
-        var total = tasks.Aggregate(TimeSpan.Zero, (sum, task) => sum + (Finish(task, reference) - task.Start.ToTimeSpan()));
-        Console.WriteLine($"    {Format(new ThemeStyle(), NameWidth).ApplyToText("total")}  {Time(theme.Duration, total)}");
+        Total(theme, tasks, reference);
     }
+
+    /// <summary>
+    ///     The same day without the bars: one row per name with what it came to, and the total.
+    ///     What `show --no-chart` prints, for when the question is how long rather than when.
+    /// </summary>
+    public static void Rows(IReadOnlyList<Doing> tasks, TimeOnly reference)
+    {
+        var theme = Current;
+
+        foreach (var task in tasks.GroupBy(t => t.What))
+        {
+            var running = task.Any(t => t.End is null);
+            var name = Format(running ? theme.Running : theme.Task, NameWidth).ApplyToText(task.Key);
+
+            Console.WriteLine($"    {name}  {Time(theme.Duration, Took(task, reference))}");
+        }
+
+        Total(theme, tasks, reference);
+    }
+
+    /// <summary>
+    ///     What a set of stretches came to. The one definition, so no two renderings of the same
+    ///     day can disagree about a number.
+    /// </summary>
+    private static TimeSpan Took(IEnumerable<Doing> stretches, TimeOnly reference) =>
+        stretches.Aggregate(TimeSpan.Zero, (sum, s) => sum + (Finish(s, reference) - s.Start.ToTimeSpan()));
+
+    /// <summary>
+    ///     The closing row. It sits in the same column as the times above it, so it reads as
+    ///     their sum — which it is, being taken over every entry rather than over the rows.
+    /// </summary>
+    private static void Total(Theme theme, IReadOnlyList<Doing> tasks, TimeOnly reference) =>
+        Console.WriteLine($"    {Format(new ThemeStyle(), NameWidth).ApplyToText("total")}  {Time(theme.Duration, Took(tasks, reference))}");
 
     /// <summary>
     ///     One row of `today theme`: the element, its settings, and a sample rendered in it.

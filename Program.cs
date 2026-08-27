@@ -16,7 +16,7 @@ Storage.Arrange();
     ("did", "<what> <duration> [when]", "Log one already over: 15m, 1h30m."),
     ("rm", "<what>", "Delete a task logged by mistake."),
     ("on", "<date> <command>", "Run one of the above against a past day."),
-    ("show", "[date]", "Draw the day as a Gantt chart."),
+    ("show", "[date] [--no-chart]", "Draw the day as a Gantt chart."),
     ("list", "", "The days kept in history."),
     ("clear", "today | history [date]", "Forget today, or a day of history."),
     ("theme", "[show | set | reset]", "Color the output."),
@@ -665,7 +665,10 @@ int On(Target current, string[] arguments)
 
 int Show(Target target, string[] arguments)
 {
-    if (arguments is [var wanted, ..])
+    var flags = arguments.Where(IsFlag).ToArray();
+    var positional = arguments.Where(a => !IsFlag(a)).ToArray();
+
+    if (positional is [var wanted, ..])
     {
         if (!TryParseDay(wanted, out var date))
         {
@@ -697,8 +700,19 @@ int Show(Target target, string[] arguments)
 
     Output.Header(target.IsToday ? $"Today {day.Date:dd MMM}" : $"{day.Date:dd MMM yyyy}");
     Output.Blank();
+
     // A day out of history has no "now" to draw an unfinished task up to.
-    Output.Chart(day.Tasks, target.IsToday ? TimeOnly.FromDateTime(DateTime.Now) : day.Tasks.Max(t => t.End ?? t.Start));
+    var reference = target.IsToday ? TimeOnly.FromDateTime(DateTime.Now) : day.Tasks.Max(t => t.End ?? t.Start);
+
+    if (flags.Contains("--no-chart"))
+    {
+        Output.Rows(day.Tasks, reference);
+    }
+    else
+    {
+        Output.Chart(day.Tasks, reference);
+    }
+
     Output.Blank();
     return 0;
 }
