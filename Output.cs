@@ -37,14 +37,10 @@ public static class Output
     public static string ColorNames => string.Join(", ", Enum.GetNames<BasicColor>());
 
     /// <summary>
-    ///     Resolves a color name, accepting the correctly spelled BrightBlack as well as
-    ///     Fansi's BrigthBlack.
+    ///     Resolves a color name
     /// </summary>
     public static bool TryGetColor(string name, out BasicColor color) =>
-        Enum.TryParse(
-            string.Equals(name, "BrightBlack", StringComparison.OrdinalIgnoreCase) ? nameof(BasicColor.BrigthBlack) : name,
-            ignoreCase: true,
-            out color);
+        Enum.TryParse(name, ignoreCase: true, out color);
 
     public static void Blank() => Console.WriteLine();
 

@@ -37,7 +37,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Fansi" Version="0.0.3" />
+    <PackageReference Include="Fansi" Version="1.0.0" />
     <PackageReference Include="Taste" Version="2.1.0" />
   </ItemGroup>
 
