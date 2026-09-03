@@ -9,8 +9,9 @@ Two things about this project make ordinary verification lie to you. Both have a
 
 ## Colors: a captured run is a false negative
 
-`Output.Plain` is true when `NO_COLOR` is set **or `Console.IsOutputRedirected`**. Every tool
-call captures stdout, so a plain `dotnet run -- show` renders with no escape sequences at all.
+Fansi's `ConsoleStyling.IsEnabled` is false when `NO_COLOR` is set **or stdout is redirected**
+(`FORCE_COLOR` overrides the redirect, `NO_COLOR` overrides everything). Every tool call
+captures stdout, so a plain `dotnet run -- show` renders with no escape sequences at all.
 Seeing no colors that way says nothing — the theme could be perfect or entirely broken.
 
 Allocate a pty with `script`:
@@ -28,8 +29,8 @@ emitted (checking a `theme set`, or that plain mode emits none); use `sed` when 
 whether it looks right.
 
 Both modes deserve a check when touching `Output`: plain mode must keep the padding while
-emitting no escapes, which is why `Format` returns an `OutputFormat` with the widths set and
-the colors left null rather than skipping formatting altogether.
+emitting no escapes, which is why `Apply` passes `ConsoleStyling.IsEnabled` to `ApplyToText`
+— Fansi drops the escape sequences but applies the widths either way.
 
 Chart width comes from `Console.WindowWidth`, which **throws** without a terminal and falls back
 to 80. Under `script` you get the real terminal width, so the layout you see is the real one.

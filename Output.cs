@@ -22,16 +22,6 @@ public static class Output
     // Four spaces, the name column, the duration column, then two spaces before the chart area.
     private static readonly string Indent = new(' ', 4 + NameWidth + 2 + TimeWidth + 2);
 
-    // Fansi always emits escape sequences, so the usual opt-outs are our job. An
-    // OutputFormat with no colors set emits none, which is what plain mode relies on.
-    private static readonly bool NoColor = Environment.GetEnvironmentVariable("NO_COLOR") is not (null or "");
-
-    // The two streams are redirected independently -- `today show > day.txt` leaves stderr on
-    // the terminal -- so each decides its own styling rather than sharing one answer.
-    private static bool Plain => NoColor || Console.IsOutputRedirected;
-
-    private static bool PlainError => NoColor || Console.IsErrorRedirected;
-
     public static Theme Current => Cook.Serve<Theme>();
 
     public static string ColorNames => string.Join(", ", Enum.GetNames<BasicColor>());
@@ -53,7 +43,7 @@ public static class Output
     ///     reason there wasn't one, and `2>/dev/null` silences the reason and not the chart.
     /// </summary>
     public static void Error(string text) =>
-        Console.Error.WriteLine(Format(Current.Error, plain: PlainError).ApplyToText(text));
+        Console.Error.WriteLine(Apply(Current.Error, text));
 
     /// <summary>
     ///     Something worth knowing that is not a failure: the command carries on and its exit
@@ -62,13 +52,13 @@ public static class Output
     ///     itself apart, so it is not mistaken for the command having gone wrong.
     /// </summary>
     public static void Warn(string text) =>
-        Console.Error.WriteLine(Format(Current.Warning, plain: PlainError).ApplyToText(text));
+        Console.Error.WriteLine(Apply(Current.Warning, text));
 
     /// <summary>
     ///     One line of `today help`: the command with its arguments, then what it does.
     /// </summary>
     public static void Command(string syntax, string does) =>
-        Console.WriteLine($"    {Format(Current.Task, SyntaxWidth).ApplyToText(syntax)}  {does}");
+        Console.WriteLine($"    {Apply(Current.Task, syntax, SyntaxWidth)}  {does}");
 
     public static void Date(DateOnly date) => Console.WriteLine(Apply(Current.Date, $"{date:yyyy-MM-dd}"));
 
@@ -133,7 +123,7 @@ public static class Output
                 }
             }
 
-            var name = Format(running ? theme.Running : theme.Task, NameWidth).ApplyToText(task.Key);
+            var name = Apply(running ? theme.Running : theme.Task, task.Key, NameWidth);
 
             Console.WriteLine($"    {name}  {Time(theme.Duration, took)}  {Bar(theme, bar)}");
         }
@@ -192,14 +182,14 @@ public static class Output
     ///     One named row, in the columns everything else lines up in.
     /// </summary>
     private static void Row(Theme theme, string name, TimeSpan took, bool running) =>
-        Console.WriteLine($"    {Format(running ? theme.Running : theme.Task, NameWidth).ApplyToText(name)}  {Time(theme.Duration, took)}");
+        Console.WriteLine($"    {Apply(running ? theme.Running : theme.Task, name, NameWidth)}  {Time(theme.Duration, took)}");
 
     /// <summary>
     ///     The closing row. It sits in the same column as the times above it, so it reads as
     ///     their sum.
     /// </summary>
     private static void Total(Theme theme, TimeSpan total) =>
-        Console.WriteLine($"    {Format(new ThemeStyle(), NameWidth).ApplyToText("total")}  {Time(theme.Duration, total)}");
+        Console.WriteLine($"    {Apply(new ThemeStyle(), "total", NameWidth)}  {Time(theme.Duration, total)}");
 
     /// <summary>
     ///     One row of `today theme`: the element, its settings, and a sample rendered in it.
@@ -208,8 +198,8 @@ public static class Output
     {
         // Padding is measured on unstyled text; the styled sample goes last so the escape
         // sequences can never be counted as width.
-        var name = Format(new ThemeStyle(), NameWidth).ApplyToText(element);
-        var settings = Format(new ThemeStyle(), 26).ApplyToText(style.ToString());
+        var name = Apply(new ThemeStyle(), element, NameWidth);
+        var settings = Apply(new ThemeStyle(), style.ToString(), 26);
 
         Console.WriteLine($"    {name}  {settings}  {Apply(style, "The quick brown fox")}");
     }
@@ -244,7 +234,7 @@ public static class Output
     ///     what the chart reports can be typed straight back in.
     /// </summary>
     private static string Time(ThemeStyle style, TimeSpan span) =>
-        Format(style, TimeWidth, TextAlignment.Right).ApplyToText(Spell(span));
+        Apply(style, Spell(span), TimeWidth, TextAlignment.Right);
 
     private static string Spell(TimeSpan span) => span switch
     {
@@ -371,31 +361,27 @@ public static class Output
         }
     }
 
-    private static string Apply(ThemeStyle style, string text) => Format(style).ApplyToText(text);
-
-    /// <param name="plain">Which stream's answer to use; null means stdout's.</param>
-    private static OutputFormat Format(
-        ThemeStyle style, int? width = null, TextAlignment? alignment = null, bool? plain = null)
+    /// <summary>
+    ///     Renders text in a style. Whether the escape sequences are actually emitted is Fansi's
+    ///     call (<see cref="ConsoleStyling.IsEnabled" />: NO_COLOR, FORCE_COLOR, TERM=dumb,
+    ///     redirection); width, alignment and truncation apply either way, so columns still line
+    ///     up in plain text.
+    /// </summary>
+    private static string Apply(
+        ThemeStyle style, string text, int? width = null, TextAlignment? alignment = null)
     {
         var format = new OutputFormat
         {
             Width = width,
             Alignment = alignment,
             AddEllipsisToOverflow = width is not null,
-        };
-
-        if (plain ?? Plain)
-        {
-            return format;
-        }
-
-        return format with
-        {
             Foreground = TryGetColor(style.Color, out var color) ? color : null,
             Bold = style.Bold ? true : null,
             Dim = style.Dim ? true : null,
             Italics = style.Italics ? true : null,
             Underline = style.Underline ? true : null,
         };
+
+        return format.ApplyToText(text, ConsoleStyling.IsEnabled);
     }
 }

@@ -241,7 +241,8 @@ so the file stays readable and a name it does not know falls back to the default
 failing to load.
 
 Styling turns itself off when stdout is redirected, and when `NO_COLOR` is set, so
-`today show > day.txt` gives you plain text.
+`today show > day.txt` gives you plain text. `FORCE_COLOR` turns it back on for a
+redirected stream, and `NO_COLOR` wins when both are set.
 
 ## License
 
