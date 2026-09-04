@@ -1,0 +1,36 @@
+name: Publish NuGet
+on:
+  push:
+    branches: [ "main" ]
+jobs:
+  build-and-publish:
+    environment: Zindre NuGet
+    runs-on: ubuntu-slim
+
+    permissions:
+      id-token: write  # enable GitHub OIDC token issuance for this job
+ 
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+        id: checkout
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        id: setup
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: .NET pack
+        id: pack
+        run: dotnet pack -c Release -o ./artifacts
+
+      # Get a short-lived NuGet API key
+      - name: NuGet login (OIDC → temp API key)
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      - name: NuGet push
+        run: dotnet nuget push artifacts/*.nupkg --api-key ${{steps.login.outputs.NUGET_API_KEY}} --source https://api.nuget.org/v3/index.json --skip-duplicate
