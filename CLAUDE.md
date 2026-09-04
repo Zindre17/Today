@@ -35,6 +35,14 @@ Styling is suppressed whenever stdout is redirected, so piping into a file or `c
 explicitly rather than leaving it to SourceLink, so the package still says where it came from
 when the git query is skipped (see the `release` skill on the sandbox and `.gitmodules`).
 
+**A push to `main` publishes to nuget.org** (`.github/workflows/publish-nuget.yml`): `dotnet pack`
+and `dotnet nuget push`, with the API key minted at job time through OIDC rather than kept as a
+long-lived secret. `--skip-duplicate` is what makes that safe to leave on every push — a build
+whose `<Version>` is already on nuget.org is a no-op instead of a failure, so **the version in
+`Today.csproj` is the release trigger**: bumping it and pushing publishes, and any other push does
+not. A version once pushed cannot be replaced, only deprecated or unlisted, which is the reason
+the `release` skill verifies before it packs rather than after.
+
 `Taste` (the persistence library) is a separate repository, `~/code/Taste`, by the same author. A
 change here that needs one there is two sessions, not one — ask before working in it. A `PreToolUse`
 guard enforces that.

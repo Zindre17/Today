@@ -142,3 +142,9 @@ Do not delete them on the user's behalf.
 A PreToolUse hook (`.claude/hooks/block-push-to-main.sh`) blocks pushing to `main`, on purpose.
 Do not work around it — not with `git -C`, not with a quoted refspec, not by any other route.
 Finish the release locally and tell the user to run `! git push origin main` themselves.
+
+That push now also **publishes to nuget.org** (`.github/workflows/publish-nuget.yml`), so it is
+the irreversible step of a release: a version once on nuget.org cannot be replaced, only
+deprecated or unlisted. Everything above is local and undoable; the push is not. Say so when
+handing the release over — the user is pushing a package, not just a branch. A push that does not
+bump `<Version>` publishes nothing (`--skip-duplicate`), so only a version bump is a release.

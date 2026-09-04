@@ -26,7 +26,15 @@ total — the same numbers, for when the question is how long rather than when.
 
 ## Install
 
-`today` is a .NET global tool and needs the .NET 10 SDK. Build and install it from source:
+`today` is a .NET global tool and needs the .NET 10 SDK.
+
+```bash
+dotnet tool install --global Today
+```
+
+`dotnet tool update --global Today` takes you to the newest release afterwards.
+
+Or build it from source, which is what you want if you mean to change it:
 
 ```bash
 git clone https://github.com/Zindre17/Today.git
@@ -35,10 +43,8 @@ dotnet pack -c Release
 dotnet tool install --global --add-source ./nupkg Today
 ```
 
-To upgrade later, `dotnet tool uninstall --global Today` and install again.
-
-> The `Today` package on nuget.org is an old 1.0.0 and is not this version — build from source
-> until it is republished.
+Releases are published to nuget.org from `main` automatically, so what is on the tip of this
+repository is what you get.
 
 ## Use
 
