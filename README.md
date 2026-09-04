@@ -6,7 +6,7 @@ A small command-line day tracker. Start a task when you begin it, end it when yo
 draw the day as a Gantt chart when you want to know where it went.
 
 ```
-$ today show
+$ today
 
 Today 26 Aug
 
@@ -17,9 +17,9 @@ Today 26 Aug
     total                  2h14m
 ```
 
-Solid bars are finished, shaded ones are still running. A name logged more than once gets one
-row with its stretches drawn on it and its time summed, because picking work back up is the
-same work.
+`today` on its own is `today show`, the day so far. Solid bars are finished, shaded ones are
+still running. A name logged more than once gets one row with its stretches drawn on it and its
+time summed, because picking work back up is the same work.
 
 `today show --no-chart` drops the bars and the axis and keeps the names, the times and the
 total — the same numbers, for when the question is how long rather than when.
@@ -51,7 +51,8 @@ today did "code review" 45m    # log something already over
 today did lunch 1h 12:30       # or one that ended earlier
 today rm standup               # remove one logged by mistake
 today on yesterday end writing 17:00   # fix a day you already filed away
-today show                     # the chart above
+today                          # the chart above
+today show                     # the same thing, spelled out
 today show --no-chart          # just the names and times
 today show yesterday           # a day out of history
 today summary week             # the last seven days, by task
@@ -72,7 +73,7 @@ today list                     # which days are kept
 | `clear` | `today \| history [date]` | Forget today, or a day of history. |
 | `theme` | `[show \| set \| reset]` | Color the output. |
 | `completion` | `<shell>` | Print the shell completion script. |
-| `help` | | The list above. |
+| `help` | | The list above. Also what bare `today` shows before you log anything. |
 | `version` | | Which version this is. |
 
 A time is `14:30` or anything `DateTime.Parse` accepts, and has to be a moment on the day you

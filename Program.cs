@@ -70,7 +70,12 @@ int Dispatch(Target target, string[] arguments) => arguments switch
     ["help" or "--help" or "-h", ..] => Help(),
     ["version" or "--version", ..] => Version(),
     [var c, ..] => NotACommand(c),
-    [] => Help()
+
+    // Bare `today` is the day you are in the middle of -- that is what it is usually being asked
+    // for. On a day with nothing on it there is no day to show, so it lists the commands instead:
+    // the empty day is exactly when someone is likeliest to be looking for them, and answering an
+    // unprompted `today` with an error on stderr would be a poor first thing for the tool to say.
+    [] => target.Day.Tasks.Count is 0 ? Help() : Show(target, [])
 };
 
 // Archives the previous day as soon as any command runs on a new day, so that
